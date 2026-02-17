@@ -7,8 +7,8 @@ import { authConfig } from './auth/auth.config';
 import { authInterceptor, provideAuth } from 'angular-auth-oidc-client';
 import { xsrfCrossSiteInterceptor } from './auth/xsrf-cross-site.interceptor';
 import { catchError, firstValueFrom, map, of } from 'rxjs';
-import { provideSsoSessionGuard } from './auth/sso-session-guard.providers';
-import { SimpleLogLevel } from './auth/sso-session-guard.service';
+import { provideSsoSessionGuard } from '../../projects/mma-sso-session-guard/src/lib/sso-session-guard.providers';
+import { SimpleLogLevel } from '../../projects/mma-sso-session-guard/src/lib/sso-session-guard.service';
 
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -46,7 +46,7 @@ export const appConfig: ApplicationConfig = {
       pingPath: '/api/session/ping',
       minIntervalMs: 5000,
       //events: ['visibilitychange', 'focus'],
-      events: ['pageshow', 'focus'],
+      events: ['pageshow', 'visibilitychange'],
       // Office365-like (opcional):
       forceLoginIfNoIdpSession: false,
       // Recover si hay cookie IdP pero auth local no:

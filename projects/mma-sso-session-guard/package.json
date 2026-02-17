@@ -1,0 +1,15 @@
+{
+  "name": "mma-sso-session-guard",
+  "version": "1.0.0",
+  "description": "Guard de sesión SSO para aplicaciones Angular con validación activa de IdP.",
+  "author": "Municipalidad de Malvinas Argentinas / Pablo Schmitt",
+  "peerDependencies": {
+    "@angular/common": "^20.3.0",
+    "@angular/core": "^20.3.0",
+    "angular-auth-oidc-client": ">=20.0.2"
+  },
+  "dependencies": {
+    "tslib": "^2.3.0"
+  },
+  "sideEffects": false
+}

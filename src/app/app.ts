@@ -12,7 +12,7 @@ import { LoginResponse, OidcSecurityService, OpenIdConfiguration } from 'angular
 import { forkJoin, Subscription, take } from 'rxjs';
 
 // ✅ Guard/infra SSO
-import { SsoSessionGuardService } from './auth/sso-session-guard.service';
+import { SsoSessionGuardService } from '../../projects/mma-sso-session-guard/src/lib/sso-session-guard.service';
 
 @Component({
   selector: 'app-root',
@@ -87,7 +87,8 @@ export class App implements OnInit, OnDestroy {
       // ✅ Marcar logout para que el guard no intente recover
       this.ssoGuard.markLogoutFromThisApp();
 
-      this.oidcSecurityService.logoffLocal();
+      //this.oidcSecurityService.logoffLocal();
+      this.oidcSecurityService.logoff().subscribe();
       return;
     }
 
