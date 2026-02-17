@@ -9,28 +9,28 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { Router, RouterOutlet } from '@angular/router';
 import { LoginResponse, OidcSecurityService, OpenIdConfiguration } from 'angular-auth-oidc-client';
-import { forkJoin, take } from 'rxjs';
+import { forkJoin, Subscription, take } from 'rxjs';
 
-const RECOVER_REFRESH_TRIED_KEY = 'oidc:recover:refresh:tried';
-const RECOVER_PROMPTNONE_TRIED_KEY = 'oidc:recover:promptnone:tried';
-const RECOVER_DISABLED_KEY = 'oidc:recover:disabled'; 
+// ✅ Guard/infra SSO
+import { SsoSessionGuardService } from './auth/sso-session-guard.service';
 
 @Component({
   selector: 'app-root',
+  standalone: true,
   imports: [
     RouterOutlet,
-    CommonModule, 
+    CommonModule,
     MatToolbarModule,
     MatButtonModule,
     MatDividerModule,
-    MatExpansionModule,    
+    MatExpansionModule,
     MatCardModule,
-    MatIconModule
+    MatIconModule,
   ],
   templateUrl: './app.html',
-  styleUrl: './app.scss'
+  styleUrl: './app.scss',
 })
-export class App implements OnInit , OnDestroy {
+export class App implements OnInit, OnDestroy {
   title = signal('...');
 
   isAuthenticated = signal(false);
@@ -48,114 +48,125 @@ export class App implements OnInit , OnDestroy {
   private http = inject(HttpClient);
   private readonly oidcSecurityService = inject(OidcSecurityService);
 
-  ngOnInit() {
-    // 1) Si estoy en /logout, NO corro checkAuth (dejo que el componente Logout haga su trabajo)
-    const path = window.location.pathname || '';
-    if (path.startsWith('/logout')) {
-      this.isAuthenticated.set(false);
-      setRecoverDisabled();
-      clearRecoverFlags();
-      this.oidcSecurityService.logoffLocal();       
-    }
+  // ✅ SSO guard
+  private readonly ssoGuard = inject(SsoSessionGuardService);
 
-    this.oidcSecurityService
-      .checkAuth()
-      .subscribe((loginResponse: LoginResponse) => {
-        const { isAuthenticated } = loginResponse;
+  private subs: Subscription[] = [];
+
+  ngOnInit(): void {
+    const path = window.location.pathname || '';
+    console.log('BOD: App.ngOnInit() path=', path);
+
+    // 0) Estado reactivo (primero)
+    this.subs.push(
+      this.oidcSecurityService.isAuthenticated$.subscribe(({ isAuthenticated }) => {
         this.isAuthenticated.set(isAuthenticated);
 
+        // Siempre cargar config (incluso sin sesión)
+        this.oidcSecurityService.getConfiguration().pipe(take(1)).subscribe(cfg => {
+          this.config.set(cfg as OpenIdConfiguration);
+          this.updateClientLabel();
+        });
+
         if (isAuthenticated) {
-          clearRecoverFlags();
-          clearRecoverDisabled();
+          // ✅ Si autenticó, permitir recover futuro (por si venías de un logout previo)
+          this.ssoGuard.clearLogoutDisabledFlag();
+
           this.loadAccessTokenPayload();
           this.loadIdTokenPayload();
         } else {
-          // 2) SOLO intento recuperar si NO está deshabilitado explícitamente
-          if (!isRecoverDisabled()) {
-            this.tryRecoverAuth();
-          } else {
-            // opcional: consumí la bandera para próximas navegaciones
-            clearRecoverDisabled();
-          }
+          this.updateClientLabel();
         }
-
-        this.oidcSecurityService.getConfiguration().pipe(take(1))
-          .subscribe(cfg => this.config.set(cfg as OpenIdConfiguration));
-        this.updateClientLabel();
-      }
+      })
     );
 
-  }
-  
-  ngOnDestroy() {
-   
+    // 1) Si estoy en /logout, corto todo y limpio local
+    if (path.startsWith('/logout')) {
+      this.isAuthenticated.set(false);
+
+      // ✅ Marcar logout para que el guard no intente recover
+      this.ssoGuard.markLogoutFromThisApp();
+
+      this.oidcSecurityService.logoffLocal();
+      return;
+    }
+
+    // 2) checkAuth SIEMPRE al iniciar (procesa code/state si venís del IdP)
+    this.oidcSecurityService.checkAuth().pipe(take(1)).subscribe((loginResponse: LoginResponse) => {
+      console.log('BOD: checkAuth isAuthenticated=', loginResponse?.isAuthenticated);
+
+      // ✅ Con la “nueva modalidad”:
+      // - App.ts solo hace checkAuth
+      // - El guard se ocupa del ping/resume y del recover(prompt=none) cuando corresponda
+      //
+      // Opcional (recomendado si querés que AL ENTRAR a BOD, sin interacción, intente SSO):
+      // hace 1 ping inicial y, si hay cookie IdP pero no auth local, dispara prompt=none.
+      void this.ssoGuard.bootstrapAuthOnce({ doCheckAuth: true })
+        .catch(err => console.warn('SSO bootstrap failed (ignored)', err));
+    });
   }
 
+  ngOnDestroy() {
+    for (const s of this.subs) s.unsubscribe();
+    this.subs = [];
+  }
+
+  // --------------------------
+  // UI actions
+  // --------------------------
   login() {
     this.oidcSecurityService.authorize();
-  }  
-
-  logout() {
-//  this.oidcSecurityService.logoff().subscribe({
-//     next: (res: any) => {
-//       // v17 suele traer res?.url; si viene, navegamos manualmente
-//       if (res?.url) {
-//         window.location.href = res.url;
-//         return;
-//       }
-//       // Fallback si no vino url
-//       this.forceEndSessionRedirect();
-//     },
-//     error: () => this.forceEndSessionRedirect(),
-//   });
-    
-    setRecoverDisabled();
-    clearRecoverFlags(); 
-    this.oidcSecurityService
-      .logoff()
-      .subscribe((result) => console.log(result));
-    
   }
 
-  private forceEndSessionRedirect(): void {
-    const authority = this.config().authority; // ej: https://idp.tu-dominio
-    const postLogoutRedirectUri = this.config().postLogoutRedirectUri||''; // ej: https://spa/signed-out
-    const idToken = this.idToken() || '';
-
-    // RP-Initiated Logout (OIDC): /connect/logout + params
-    const url =
-      `${authority}/connect/logout` +
-      `?post_logout_redirect_uri=${encodeURIComponent(postLogoutRedirectUri)}` +
-      (idToken ? `&id_token_hint=${encodeURIComponent(idToken)}` : '');
-
-    // Navegación “dura” para evitar bucles
-    alert(url);
-    window.location.assign(url);
+  logout() {
+    // ✅ Clave: marcar logout para evitar recover automático
+    this.ssoGuard.markLogoutFromThisApp();
+    this.oidcSecurityService.logoff().subscribe(result => console.log(result));
   }
 
   mostrarAccessToken() {
-    this.oidcSecurityService.getAccessToken().subscribe(at => 
-      {
-        console.clear();
-        console.log(`AccessToken = ${at}`);
-      });
+    this.oidcSecurityService.getAccessToken().subscribe(at => {
+      console.clear();
+      console.log(`AccessToken = ${at}`);
+    });
   }
 
   goUserProfile() {
-    this.oidcSecurityService.getConfiguration().subscribe(s => {
+    this.oidcSecurityService.getConfiguration().pipe(take(1)).subscribe(s => {
       const authority = (s as OpenIdConfiguration).authority;
       const clientId = (s as OpenIdConfiguration).clientId;
       const currentUrl = window.location.origin + window.location.pathname;
       const returnUrl = encodeURIComponent(currentUrl);
-      const logout = 'logout';
 
-      //const idpUrl = `${authority}/account/profile?client_id=${clientId}&returnUrl=${returnUrl}&logoutPath=${encodeURIComponent(logout)}`;
       const idpUrl = `${authority}/account/profile?client_id=${clientId}&returnUrl=${returnUrl}`;
       window.location.href = idpUrl;
     });
   }
 
-  // Carga el JWT y su payload cuando abrís el expansion panel
+  goToMasPagos() {
+    window.location.href = 'https://localhost:4203/?from=bod';
+  }
+
+  refreshSession() {
+    if (this.refreshing()) return;
+    this.refreshing.set(true);
+
+    this.oidcSecurityService.forceRefreshSession().pipe(take(1)).subscribe({
+      next: _ => {
+        this.refreshing.set(false);
+        this.loadAccessTokenPayload();
+        this.loadIdTokenPayload();
+      },
+      error: err => {
+        this.refreshing.set(false);
+        console.error('Refresh ERROR', err);
+      },
+    });
+  }
+
+  // --------------------------
+  // Panels loaders
+  // --------------------------
   loadAccessTokenPayload() {
     if (!this.isAuthenticated()) {
       this.accessToken.set('');
@@ -163,41 +174,20 @@ export class App implements OnInit , OnDestroy {
       return;
     }
 
-    this.oidcSecurityService.getAccessToken().pipe(take(1)).subscribe(at => {
-      this.accessToken.set(at ?? '');
-    });
-
-    this.oidcSecurityService.getPayloadFromAccessToken().pipe(take(1)).subscribe(p => {
-      this.accessPayload.set(p ?? null);
-    });
-  }
-
-  // Helpers de copiado
-  async copy(text?: string | null) {
-    if (!text) return;
-    try { await navigator.clipboard.writeText(text); }
-    catch { /* no-op */ }
-  }
-
-  async copyJson(obj: any) {
-    if (!obj) return;
-    try { await navigator.clipboard.writeText(JSON.stringify(obj, null, 2)); }
-    catch { /* no-op */ }
+    this.oidcSecurityService.getAccessToken().pipe(take(1)).subscribe(at => this.accessToken.set(at ?? ''));
+    this.oidcSecurityService.getPayloadFromAccessToken().pipe(take(1)).subscribe(p => this.accessPayload.set(p ?? null));
   }
 
   loadIdTokenPayload() {
-      if (!this.isAuthenticated()) {
-        this.idToken.set('');
-        this.idPayload.set(null);
-        return;
-      }
+    if (!this.isAuthenticated()) {
+      this.idToken.set('');
+      this.idPayload.set(null);
+      return;
+    }
 
-      this.oidcSecurityService.getIdToken().pipe(take(1))
-        .subscribe(it => this.idToken.set(it ?? ''));
-
-      this.oidcSecurityService.getPayloadFromIdToken().pipe(take(1))
-        .subscribe(p => this.idPayload.set(p ?? null));
-  }  
+    this.oidcSecurityService.getIdToken().pipe(take(1)).subscribe(it => this.idToken.set(it ?? ''));
+    this.oidcSecurityService.getPayloadFromIdToken().pipe(take(1)).subscribe(p => this.idPayload.set(p ?? null));
+  }
 
   loadUserInfo() {
     if (!this.isAuthenticated()) {
@@ -208,7 +198,7 @@ export class App implements OnInit , OnDestroy {
 
     forkJoin([
       this.oidcSecurityService.getAccessToken().pipe(take(1)),
-      this.oidcSecurityService.getConfiguration().pipe(take(1))
+      this.oidcSecurityService.getConfiguration().pipe(take(1)),
     ]).subscribe({
       next: ([token, cfg]) => {
         const authority = (cfg as OpenIdConfiguration)?.authority ?? '';
@@ -228,10 +218,10 @@ export class App implements OnInit , OnDestroy {
               error: err?.message ?? 'UserInfo error',
               status: err?.status,
             });
-          }
+          },
         });
       },
-      error: (e) => this.userInfo.set({ error: e?.message ?? 'config/token error' })
+      error: (e) => this.userInfo.set({ error: e?.message ?? 'config/token error' }),
     });
   }
 
@@ -241,125 +231,39 @@ export class App implements OnInit , OnDestroy {
     this.loadUserInfo();
   }
 
-  refreshSession() {
-    if (this.refreshing()) return;
-    this.refreshing.set(true);
-
-    this.oidcSecurityService.forceRefreshSession().pipe(take(1)).subscribe({
-      next: _ => {
-        this.refreshing.set(false);
-        // Refrescar paneles
-        this.loadAccessTokenPayload();
-        this.loadIdTokenPayload();
-        // Si querés reconsultar userinfo automáticamente:
-        // this.refreshUserInfo();
-      },
-      error: err => {
-        this.refreshing.set(false);
-        console.error('Refresh ERROR', err);
-      }
-    });
+  // --------------------------
+  // Copy helpers
+  // --------------------------
+  async copy(text?: string | null) {
+    if (!text) return;
+    try { await navigator.clipboard.writeText(text); } catch { /* no-op */ }
   }
 
+  async copyJson(obj: any) {
+    if (!obj) return;
+    try { await navigator.clipboard.writeText(JSON.stringify(obj, null, 2)); } catch { /* no-op */ }
+  }
+
+  // --------------------------
+  // Label
+  // --------------------------
   private updateClientLabel() {
-    // primero intento con el id_token
+    if (!this.isAuthenticated()) {
+      this.oidcSecurityService.getConfiguration().pipe(take(1)).subscribe(cfg => {
+        this.title.set((cfg as OpenIdConfiguration).clientId ?? '');
+      });
+      return;
+    }
+
     this.oidcSecurityService.getPayloadFromIdToken().pipe(take(1)).subscribe(idp => {
       const claimName = (idp as any)?.client_name || (idp as any)?.azp || (idp as any)?.client_id;
       if (claimName) {
         this.title.set(claimName);
         return;
       }
-      // fallback a la config
       this.oidcSecurityService.getConfiguration().pipe(take(1)).subscribe(cfg => {
         this.title.set((cfg as OpenIdConfiguration).clientId ?? '');
       });
     });
-
   }
-
-
-  /** Recupera sesión SIN loop:
-   *  1) refresh una sola vez por pestaña
-   *  2) si falla, prompt=none una sola vez por pestaña
-   *  3) si también falla, no reintenta (queda para login interactivo)
-   */
-  private tryRecoverAuth() {
-    if (isRecoverDisabled()) {
-      // opcional: console.debug('Recover deshabilitado por logout');
-      return;
-    }
-    // 1) refresh (una sola vez)
-    if (!wasTried(RECOVER_REFRESH_TRIED_KEY)) {
-      markTried(RECOVER_REFRESH_TRIED_KEY);
-      this.oidcSecurityService.forceRefreshSession().pipe(take(1)).subscribe({
-        next: (resp) => {
-          const ok = !!resp?.isAuthenticated;
-          if (ok) {
-            // éxito: rehidratar y limpiar flags
-            clearRecoverFlags();
-            this.isAuthenticated.set(true);
-            this.loadAccessTokenPayload();
-            this.loadIdTokenPayload();
-          } else {
-            // no hay sesión válida: pasar a prompt=none (una sola vez)
-            this.tryPromptNone();
-          }
-        },
-        error: () => {
-          // 2) prompt=none (una sola vez)
-          if (!wasTried(RECOVER_PROMPTNONE_TRIED_KEY)) {
-            markTried(RECOVER_PROMPTNONE_TRIED_KEY);
-            this.tryPromptNone();
-          }
-          // Si ya se intentó prompt=none antes, no hacemos nada más (evita loop)
-        }
-      });
-      return;
-    }
-
-    // Si ya intentamos refresh y llegó acá, probamos prompt=none solo si no se intentó
-    if (!wasTried(RECOVER_PROMPTNONE_TRIED_KEY)) {
-      markTried(RECOVER_PROMPTNONE_TRIED_KEY);
-      this.oidcSecurityService.authorize(undefined, {
-        customParams: { prompt: 'none' }
-      });
-    }
-    // Si ambos ya fueron intentados, NO reintenta automáticamente.
-    // El usuario puede tocar "Login" para un flujo interactivo normal.
-  }
-
-  private tryPromptNone() {
-    if (!wasTried(RECOVER_PROMPTNONE_TRIED_KEY)) {
-      markTried(RECOVER_PROMPTNONE_TRIED_KEY);
-      this.oidcSecurityService.authorize(undefined, {
-        customParams: { prompt: 'none' }
-      });
-      // Importante: no limpiar flags acá; sólo cuando vuelva autenticado
-    }
-  }  
-
-}
-
-// helpers
-function wasTried(key: string) {
-  try { return sessionStorage.getItem(key) === '1'; } catch { return false; }
-}
-function markTried(key: string) {
-  try { sessionStorage.setItem(key, '1'); } catch {}
-}
-function clearRecoverFlags() {
-  try {
-    sessionStorage.removeItem(RECOVER_REFRESH_TRIED_KEY);
-    sessionStorage.removeItem(RECOVER_PROMPTNONE_TRIED_KEY);
-  } catch {}
-}
-
-function isRecoverDisabled() {
-  try { return localStorage.getItem(RECOVER_DISABLED_KEY) === '1'; } catch { return false; }
-}
-function setRecoverDisabled() {
-  try { localStorage.setItem(RECOVER_DISABLED_KEY, '1'); } catch {}
-}
-function clearRecoverDisabled() {
-  try { localStorage.removeItem(RECOVER_DISABLED_KEY); } catch {}
 }

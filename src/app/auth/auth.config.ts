@@ -2,30 +2,29 @@ import { LogLevel, PassedInitialConfig } from 'angular-auth-oidc-client';
 
 export const authConfig: PassedInitialConfig = {
   config: {
-            authority: 'https://sb-idp.malvinasargentinas.gob.ar',
-            //authority: 'https://localhost:7301',
+            //authority: 'https://idp.malvinasargentinas.gob.ar',
+            //authority: 'https://sb-idp.malvinasargentinas.gob.ar',
+            authority: 'https://localhost:7301',
             issValidationOff: true,
             strictIssuerValidationOnWellKnownRetrievalOff: true,
-            redirectUrl: window.location.origin,
+            //redirectUrl: window.location.origin,
+            redirectUrl: `${window.location.origin}`,
             postLogoutRedirectUri: `${window.location.origin}/logout`,
+            
+            // clientId: 'js_maspagos_client', //  https://test-spa.malvinasargentinas.gob.ar/
+            // scope: 'openid profile email phone offline_access ingresos tramites',
+            // postLoginRoute: 'tasas',
 
-            //clientId: 'jsclient',
-            //scope: 'openid profile email phone offline_access ingresos',
-            //postLoginRoute: 'tasas',
-
-            //clientId: 'js_bod_client',
-            //scope: 'openid profile email phone offline_access tramites',
-            //postLoginRoute: '/',
-
-
-            clientId: 'jslegacym2',
-            scope: 'openid profile email phone offline_access org employee employment entitlements tramites', // jslegacym2
-            postLoginRoute: '/',
+            clientId: 'js_bod_hab_client', // https://test-spa-opendata.malvinasargentinas.gob.ar/
+            scope: 'openid profile email phone offline_access tramites',
+            postLoginRoute: 'habilitaciones',
 
             responseType: 'code',
-            silentRenew: true,
-            useRefreshToken: false,
+            startCheckSession: false,
+            silentRenew: false,
+            useRefreshToken: true,
             ignoreNonceAfterRefresh: true,
+            historyCleanupOff: false,
             triggerRefreshWhenIdTokenExpired: true,
             autoUserInfo: true, 
             renewUserInfoAfterTokenRenew: true,
@@ -35,6 +34,7 @@ export const authConfig: PassedInitialConfig = {
             // 🔑 Muy importante: el interceptor solo agrega el token si la URL empieza con uno de estos prefijos
             secureRoutes: [
               'https://sb-comon-api.malvinasargentinas.gob.ar',
+              'https://sb-pagosonline.malvinasargentinas.gob.ar/tasas'
             ],            
         }
 }
