@@ -46,7 +46,7 @@ export const appConfig: ApplicationConfig = {
       pingPath: '/api/session/ping',
       minIntervalMs: 5000,
       //events: ['visibilitychange', 'focus'],
-      events: ['pageshow', 'visibilitychange'],
+      events: ['pageshow', 'focus'],
       // Office365-like (opcional):
       forceLoginIfNoIdpSession: false,
       // Recover si hay cookie IdP pero auth local no:

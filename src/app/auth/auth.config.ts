@@ -1,10 +1,11 @@
 import { LogLevel, PassedInitialConfig } from 'angular-auth-oidc-client';
+import { environment } from '../../environments/environment.prod';
 
 export const authConfig: PassedInitialConfig = {
   config: {
             //authority: 'https://idp.malvinasargentinas.gob.ar',
             //authority: 'https://sb-idp.malvinasargentinas.gob.ar',
-            authority: 'https://localhost:7301',
+            authority: environment.authConfig.authority,
             issValidationOff: true,
             strictIssuerValidationOnWellKnownRetrievalOff: true,
             //redirectUrl: window.location.origin,

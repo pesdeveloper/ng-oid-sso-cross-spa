@@ -13,6 +13,7 @@ import { forkJoin, Subscription, take } from 'rxjs';
 
 // ✅ Guard/infra SSO
 import { SsoSessionGuardService } from '../../projects/mma-sso-session-guard/src/lib/sso-session-guard.service';
+import { environment } from '../environments/environment.prod';
 
 @Component({
   selector: 'app-root',
@@ -87,8 +88,8 @@ export class App implements OnInit, OnDestroy {
       // ✅ Marcar logout para que el guard no intente recover
       this.ssoGuard.markLogoutFromThisApp();
 
-      //this.oidcSecurityService.logoffLocal();
-      this.oidcSecurityService.logoff().subscribe();
+      this.oidcSecurityService.logoffLocal();
+      //this.oidcSecurityService.logoff().subscribe();
       return;
     }
 
@@ -145,7 +146,8 @@ export class App implements OnInit, OnDestroy {
   }
 
   goToMasPagos() {
-    window.location.href = 'https://localhost:4203/?from=bod';
+    window.location.href = environment.externalSites.masPagos;
+    //window.location.href = 'https://sb-pagosonline.malvinasargentinas.gob.ar/?from=bod';
   }
 
   refreshSession() {
