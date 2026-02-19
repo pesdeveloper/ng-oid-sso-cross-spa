@@ -122,6 +122,15 @@ export interface SsoSessionGuardOptions {
     /** Implementación concreta del loader (la arma el provider con HttpClient) */
     loader: (url: string) => Promise<void>;
   };
+
+  /**
+   * Lista blanca de prefijos de rutas permitidas para returnUrl.
+   * Si no se define => se permite cualquier ruta (comportamiento actual).
+   *
+   * Ej:
+   * ['/datos', '/clientes']
+   */
+  allowedReturnUrlPrefixes?: string[];  
 }
 
 // -----------------------------
@@ -684,6 +693,15 @@ export class SsoSessionGuardService {
       if (this.isOidcCallbackUrl(href)) return;
       if (window.location.pathname.startsWith('/logout')) return;
 
+      const u = new URL(href, window.location.origin);
+      const path = u.pathname;
+
+      // ✅ VALIDACIÓN DE SEGURIDAD
+      if (!this.isAllowedReturnPath(path)) {
+        this.logWarn(`returnUrl rejected (not allowed): ${path}`);
+        return;
+      }
+            
       sessionStorage.setItem(this.returnUrlKey, href);
       sessionStorage.setItem(this.returnUrlPendingKey, '1');
       this.logDebug(`returnUrl saved: ${href}`);
@@ -764,6 +782,16 @@ export class SsoSessionGuardService {
     }
   }
 
+  private isAllowedReturnPath(pathname: string): boolean {
+    const list = this.opts.allowedReturnUrlPrefixes;
+
+    // Si no hay whitelist → comportamiento actual (permitir todo)
+    if (!list || list.length === 0) return true;
+
+    return list.some(prefix =>
+      pathname === prefix || pathname.startsWith(prefix + '/')
+    );
+  }
 
   // -----------------------------
   // Logging

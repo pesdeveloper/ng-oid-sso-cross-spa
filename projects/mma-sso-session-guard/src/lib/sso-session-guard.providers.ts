@@ -91,6 +91,7 @@ export interface SsoSessionGuardAppConfig {
     run?: 'beforePing' | 'beforeRecover' | 'bootstrap';
   };
 
+  allowedReturnUrlPrefixes?: string[];
 }
 
 /** Token para inyectar la config */
@@ -152,6 +153,8 @@ export function provideSsoSessionGuard(config: SsoSessionGuardAppConfig): Enviro
                 ),
             }
           : undefined,
+
+        allowedReturnUrlPrefixes: cfg.allowedReturnUrlPrefixes,          
       };
 
       // ✅ instala hooks (pageshow/focus/visibilitychange), throttle, inFlight, etc.
