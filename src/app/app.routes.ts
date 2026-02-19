@@ -7,6 +7,6 @@ export const routes: Routes = [
     { path: '', component: Home },
     { path: 'logout', component: Logout },
     { path: 'habilitaciones', component: Habilitaciones },
-    { path: 'tasas', redirectTo: '/habilitaciones', pathMatch: 'full' },
+    { path: 'datos/:sujeto/:cuenta', loadComponent: () => import('./pages/datos/datos').then(m => m.Datos) },
     { path: '**', redirectTo: '/' },
 ];

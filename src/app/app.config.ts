@@ -24,29 +24,13 @@ export const appConfig: ApplicationConfig = {
       }),  
       withInterceptors([authInterceptor(), xsrfCrossSiteInterceptor]),
     ), 
-    // {
-    //   provide: 'ANTIFORGERY_TOKEN_LOADER',
-    //   multi: true,
-    //   useFactory: () => {
-    //     const http = inject(HttpClient);
-    //     return firstValueFrom(
-    //       http.get('https://localhost:7301/antiforgery/token', {
-    //         withCredentials: true,
-    //         responseType: 'text' as const,
-    //       }).pipe(
-    //         map(() => void 0),
-    //         catchError(() => of(void 0))
-    //       )
-    //     );
-    //   }
-    // },
-    
     provideSsoSessionGuard({
       appNs: 'bod',
       pingPath: '/api/session/ping',
       minIntervalMs: 5000,
       //events: ['visibilitychange', 'focus'],
-      events: ['pageshow', 'focus'],
+      //events: ['pageshow', 'focus'],
+      events: ['pageshow'],
       // Office365-like (opcional):
       forceLoginIfNoIdpSession: false,
       // Recover si hay cookie IdP pero auth local no:

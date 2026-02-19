@@ -1,0 +1,34 @@
+.datos-container {
+  display: flex;
+  justify-content: center;
+  padding: 2rem;
+}
+
+.datos-card {
+  width: 100%;
+  max-width: 500px;
+  padding: 1rem;
+}
+
+.param-row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+  padding: 0.5rem;
+  background-color: rgba(0, 0, 0, 0.03);
+  border-radius: 4px;
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+
+  .label {
+    font-weight: 500;
+    color: #555;
+  }
+
+  .value {
+    font-weight: bold;
+    color: #333;
+  }
+}

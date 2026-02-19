@@ -1,5 +1,5 @@
 import { LogLevel, PassedInitialConfig } from 'angular-auth-oidc-client';
-import { environment } from '../../environments/environment.prod';
+import { environment } from '../../environments/environment';
 
 export const authConfig: PassedInitialConfig = {
   config: {
@@ -8,17 +8,12 @@ export const authConfig: PassedInitialConfig = {
             authority: environment.authConfig.authority,
             issValidationOff: true,
             strictIssuerValidationOnWellKnownRetrievalOff: true,
-            //redirectUrl: window.location.origin,
             redirectUrl: `${window.location.origin}`,
             postLogoutRedirectUri: `${window.location.origin}/logout`,
             
-            // clientId: 'js_maspagos_client', //  https://test-spa.malvinasargentinas.gob.ar/
-            // scope: 'openid profile email phone offline_access ingresos tramites',
-            // postLoginRoute: 'tasas',
-
-            clientId: 'js_bod_hab_client', // https://test-spa-opendata.malvinasargentinas.gob.ar/
+            clientId: 'js_bod_hab_client',
             scope: 'openid profile email phone offline_access tramites',
-            postLoginRoute: 'habilitaciones',
+            postLoginRoute: '/',
 
             responseType: 'code',
             startCheckSession: false,
@@ -33,9 +28,9 @@ export const authConfig: PassedInitialConfig = {
             renewTimeBeforeTokenExpiresInSeconds: 120,
             logLevel: LogLevel.Debug,
             // 🔑 Muy importante: el interceptor solo agrega el token si la URL empieza con uno de estos prefijos
-            secureRoutes: [
-              'https://sb-comon-api.malvinasargentinas.gob.ar',
-              'https://sb-pagosonline.malvinasargentinas.gob.ar/tasas'
-            ],            
+            // secureRoutes: [
+            //   'https://sb-comon-api.malvinasargentinas.gob.ar',
+            //   'https://sb-pagosonline.malvinasargentinas.gob.ar/tasas'
+            // ],            
         }
 }

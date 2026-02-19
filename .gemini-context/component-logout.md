@@ -11,3 +11,4 @@ Componente de finalización de sesión. Su lógica ha sido simplificada drástic
 
 ## Dependencies
 - `Router`: Para la redirección final.
+- `OidcSecurityService`: Inyectado pero no usado activamente en el bloque `ngOnInit` actual.

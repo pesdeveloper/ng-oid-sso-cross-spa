@@ -24,6 +24,7 @@
 // - O manual: inyectás SsoSessionGuardService y llamás start(opts) en App.ngOnInit().
 
 import { Injectable } from '@angular/core';
+import { Router } from '@angular/router';
 import { OidcSecurityService } from 'angular-auth-oidc-client';
 import { Observable, firstValueFrom } from 'rxjs';
 import { take } from 'rxjs/operators';
@@ -167,6 +168,9 @@ export class SsoSessionGuardService {
 
   private isResuming = false; // mutex simple
 
+  private returnUrlKey = '';
+  private returnUrlPendingKey = '';
+
   /**
    * Inicia el guard y engancha hooks.
    * Llamar 1 vez.
@@ -204,6 +208,9 @@ export class SsoSessionGuardService {
     this.interactiveOnceKey = `${this.opts.appNs}:oidc:interactive:once`;
     this.logoutDisabledKey = `${this.opts.appNs}:oidc:recover:disabled`;
 
+    this.returnUrlKey = `${this.opts.appNs}:oidc:returnUrl`;
+    this.returnUrlPendingKey = `${this.opts.appNs}:oidc:returnUrl:pending`;
+
     this.logDebug(
       `antiforgery enabled=${!!this.opts.antiforgery?.enabled} run=${
         this.opts.antiforgery?.run ?? 'beforePing'
@@ -221,7 +228,7 @@ export class SsoSessionGuardService {
    *
    * Si VOS querés enlazarlo con checkAuth, llamá esto en tu App.ts.
    */
-  async bootstrapAuthOnce(params?: { doCheckAuth?: boolean }): Promise<void> {
+  async bootstrapAuthOnce(params?: { doCheckAuth?: boolean; router?: Router }): Promise<void> {
     const doCheckAuth = params?.doCheckAuth ?? false;
 
     // ✅ GARANTÍA: si antiforgery.enabled => SIEMPRE antes del ping en bootstrap
@@ -238,6 +245,13 @@ export class SsoSessionGuardService {
     if (doCheckAuth) {
       const resp = await firstValueFrom(this.opts.oidc.checkAuth().pipe(take(1)));
       this.logDebug(`bootstrap: checkAuth isAuthenticated=${resp?.isAuthenticated}`);
+
+      // ✅ CLAVE: si venís del callback, deferir restore para que NO lo pise el oidc-client
+      if (resp?.isAuthenticated && params?.router) {
+        const router = params?.router;
+        setTimeout(() => this.tryRestoreAfterLogin(router), 0);
+      }      
+
       if (!resp?.isAuthenticated) {
         await this.handleHasIdpButNoLocalAuth('bootstrap');
       }
@@ -251,6 +265,9 @@ export class SsoSessionGuardService {
     this.setLogoutDisabled();
     this.clearPromptNoneOnce();
     this.clearInteractiveOnce();
+
+    // ✅ limpieza de deep-link pendiente
+    this.clearReturnUrlPending();    
   }
 
   clearLogoutDisabledFlag(): void {
@@ -268,10 +285,18 @@ export class SsoSessionGuardService {
     const { events } = this.opts;
 
     if (events.includes('pageshow')) {
-      const fn = (ev: PageTransitionEvent) => {
+     const fn = (ev: PageTransitionEvent) => {
         const persisted = (ev as any)?.persisted === true;
-        this.onResume(`pageshow persisted=${persisted}`);
+
+        // ✅ solo BFCache/back-forward (persisted=true)
+        if (!persisted) {
+          this.logDebug(`pageshow ignored (persisted=false)`);
+          return;
+        }
+
+        this.onResume(`pageshow persisted=true`);
       };
+
       window.addEventListener('pageshow', fn);
       this.detachFns.push(() => window.removeEventListener('pageshow', fn));
     }
@@ -445,6 +470,7 @@ export class SsoSessionGuardService {
       this.logDebug(`office365-like: forceLoginIfNoIdpSession=true canInteractive=${can} ctx=${context}`);
       if (can) {
         try {
+          this.saveReturnUrlOnce();
           this.opts.oidc.authorize();
         } catch (e) {
           this.logError(`authorize() failed. ctx=${context}`, e);
@@ -472,6 +498,7 @@ export class SsoSessionGuardService {
       }
 
       try {
+        this.saveReturnUrlOnce();
         this.opts.oidc.authorize(undefined, { customParams: { prompt: 'none' } });
       } catch (e) {
         this.logError(`authorize(prompt=none) failed. ctx=${context}`, e);
@@ -485,6 +512,7 @@ export class SsoSessionGuardService {
       if (!can) return;
 
       try {
+        this.saveReturnUrlOnce();
         this.opts.oidc.authorize();
       } catch (e) {
         this.logError(`authorize() failed. ctx=${context}`, e);
@@ -647,6 +675,95 @@ export class SsoSessionGuardService {
       /* no-op */
     }
   }
+
+  private saveReturnUrlOnce(): void {
+    try {
+      if (sessionStorage.getItem(this.returnUrlPendingKey) === '1') return;
+
+      const href = window.location.href;
+      if (this.isOidcCallbackUrl(href)) return;
+      if (window.location.pathname.startsWith('/logout')) return;
+
+      sessionStorage.setItem(this.returnUrlKey, href);
+      sessionStorage.setItem(this.returnUrlPendingKey, '1');
+      this.logDebug(`returnUrl saved: ${href}`);
+    } catch {
+      /* no-op */
+    }
+  }
+
+  private clearReturnUrlPending(): void {
+    try {
+      sessionStorage.removeItem(this.returnUrlPendingKey);
+      sessionStorage.removeItem(this.returnUrlKey);
+    } catch {
+      /* no-op */
+    }
+  }
+
+  private consumeReturnUrl(): string | null {
+    try {
+      if (sessionStorage.getItem(this.returnUrlPendingKey) !== '1') return null;
+
+      const href = sessionStorage.getItem(this.returnUrlKey) || '';
+
+      // ✅ limpieza one-shot ANTES de cualquier navegación (anti-loop)
+      sessionStorage.removeItem(this.returnUrlPendingKey);
+      sessionStorage.removeItem(this.returnUrlKey);
+
+      return href || null;
+    } catch {
+      return null;
+    }
+  }
+
+  public tryRestoreAfterLogin(router: Router, opts?: { replaceUrl?: boolean }): void {
+    try {
+      const href = this.consumeReturnUrl();
+
+      console.log(`>>>> tryRestoreAfterLogin href = ${href}`)
+      if (!href) return;
+
+      const u = new URL(href, window.location.origin);
+      const path = u.pathname;
+
+      // ✅ guard mínimo: jamás restaurar a rutas internas de auth/logout
+      if (
+        path.startsWith('/auth/callback') ||
+        path.startsWith('/auth/restore') ||
+        path.startsWith('/auth/unauthorized') ||
+        path.startsWith('/logout')
+      ) {
+        this.logDebug(`restore ignored (auth route): ${path}`);
+        return;
+      }
+
+      const current =
+        window.location.pathname +
+        window.location.search +
+        window.location.hash;
+
+      const target = u.pathname + u.search + u.hash;
+      if (current === target) return;
+
+      const queryParams: Record<string, string> = {};
+      u.searchParams.forEach((v, k) => (queryParams[k] = v));
+
+      const fragment = u.hash ? u.hash.substring(1) : undefined;
+
+      this.logDebug(`restore -> ${target}`);
+
+      console.log(`>>> tryRestoreAfterLogin navigate -> ${target} queryParams=${JSON.stringify(queryParams)} fragment=${fragment} replaceUrl=${opts?.replaceUrl ?? true}`)
+      void router.navigate([u.pathname], {
+        queryParams,
+        fragment,
+        replaceUrl: opts?.replaceUrl ?? true,
+      });
+    } catch (e) {
+      this.logWarn(`restore failed (ignored).`, e);
+    }
+  }
+
 
   // -----------------------------
   // Logging

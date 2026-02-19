@@ -8,12 +8,12 @@ import { MatExpansionModule } from '@angular/material/expansion';
 import { MatIconModule } from '@angular/material/icon';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { Router, RouterOutlet } from '@angular/router';
-import { LoginResponse, OidcSecurityService, OpenIdConfiguration } from 'angular-auth-oidc-client';
-import { forkJoin, Subscription, take } from 'rxjs';
+import { EventTypes, LoginResponse, OidcSecurityService, OpenIdConfiguration, PublicEventsService } from 'angular-auth-oidc-client';
+import { filter, forkJoin, Subscription, take } from 'rxjs';
 
 // ✅ Guard/infra SSO
 import { SsoSessionGuardService } from '../../projects/mma-sso-session-guard/src/lib/sso-session-guard.service';
-import { environment } from '../environments/environment.prod';
+import { environment } from '../environments/environment';
 
 @Component({
   selector: 'app-root',
@@ -63,6 +63,8 @@ export class App implements OnInit, OnDestroy {
       this.oidcSecurityService.isAuthenticated$.subscribe(({ isAuthenticated }) => {
         this.isAuthenticated.set(isAuthenticated);
 
+        console.log(`>> ngOnInit isAuthenticated=${isAuthenticated}`);
+
         // Siempre cargar config (incluso sin sesión)
         this.oidcSecurityService.getConfiguration().pipe(take(1)).subscribe(cfg => {
           this.config.set(cfg as OpenIdConfiguration);
@@ -70,13 +72,16 @@ export class App implements OnInit, OnDestroy {
         });
 
         if (isAuthenticated) {
-          // ✅ Si autenticó, permitir recover futuro (por si venías de un logout previo)
+          console.log(`>> ngOnInit isAuthenticated=${isAuthenticated} / this.ssoGuard.clearLogoutDisabledFlag();`);
+          console.log(`>> Proceso de autenticacion completado !!!!!!`);
+
           this.ssoGuard.clearLogoutDisabledFlag();
 
           this.loadAccessTokenPayload();
           this.loadIdTokenPayload();
+
         } else {
-          this.updateClientLabel();
+          //this.updateClientLabel();
         }
       })
     );
@@ -93,25 +98,18 @@ export class App implements OnInit, OnDestroy {
       return;
     }
 
-    // 2) checkAuth SIEMPRE al iniciar (procesa code/state si venís del IdP)
-    this.oidcSecurityService.checkAuth().pipe(take(1)).subscribe((loginResponse: LoginResponse) => {
-      console.log('BOD: checkAuth isAuthenticated=', loginResponse?.isAuthenticated);
-
-      // ✅ Con la “nueva modalidad”:
-      // - App.ts solo hace checkAuth
-      // - El guard se ocupa del ping/resume y del recover(prompt=none) cuando corresponda
-      //
-      // Opcional (recomendado si querés que AL ENTRAR a BOD, sin interacción, intente SSO):
-      // hace 1 ping inicial y, si hay cookie IdP pero no auth local, dispara prompt=none.
-      void this.ssoGuard.bootstrapAuthOnce({ doCheckAuth: true })
-        .catch(err => console.warn('SSO bootstrap failed (ignored)', err));
-    });
+    // 2) ✅ Arranque único: el guard hace ping + (si corresponde) checkAuth + recover(prompt=none)
+    //    Esto cubre el caso MasPagos -> BOD (carga inicial, sin focus/visibilitychange).
+    void this.ssoGuard.bootstrapAuthOnce({ doCheckAuth: true, router: this.router  })
+      .catch(err => console.warn('SSO bootstrap failed (ignored)', err));
   }
+
 
   ngOnDestroy() {
     for (const s of this.subs) s.unsubscribe();
     this.subs = [];
   }
+
 
   // --------------------------
   // UI actions
@@ -146,6 +144,7 @@ export class App implements OnInit, OnDestroy {
   }
 
   goToMasPagos() {
+    //window.location.href = 'https://localhost:4203/?from=bod';
     window.location.href = environment.externalSites.masPagos;
     //window.location.href = 'https://sb-pagosonline.malvinasargentinas.gob.ar/?from=bod';
   }

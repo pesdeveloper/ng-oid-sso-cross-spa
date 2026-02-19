@@ -3,11 +3,11 @@
 **Path**: `src/app/pages/habilitaciones/habilitaciones.ts`
 
 ## Description
-Página de redirección/landing para el módulo de Habilitaciones. Reemplaza al anterior componente `Tasas`.
+Página de redirección/landing para el módulo de Habilitaciones. Su función UI ha sido trasladada al Shell de `App`.
 
 ## Logic Flow
-- **External Redirect**: Contiene un método `goToExternal()` que redirige al usuario a `https://localhost:4203/tasas`.
-- **UI**: Muestra una interfaz simple con botones o tarjetas (Material Design) para iniciar el trámite o consulta externa.
+- **External Redirect**: Contiene un método `goToExternal()` que redirige al usuario a `https://localhost:4203/tasas`, pero no se invoca directamente en la vista actual.
+- **UI**: Contenedor vacío. Las acciones de navegación y autenticación se encuentran en el componente raíz (`App`).
 
 ## Dependencies
-- Ninguna dependencia de servicios inyectada explícitamente más allá de lo necesario para el renderizado (Material modules).
+- Material modules (Button, Card, Icon) importados pero no utilizados activamente en el template.

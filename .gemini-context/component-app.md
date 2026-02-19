@@ -12,31 +12,41 @@ Componente raíz de la aplicación. Orquesta la inicialización de la seguridad,
 - `HttpClient`: Peticiones HTTP auxiliares.
 
 ## Key Features
-- **Auth State**: Mantiene señales (`signals`) para `isAuthenticated`, `accessToken`, `userInfo`, etc.
+- **Auth State**: Señales para `isAuthenticated`, `accessToken`, `accessPayload`, `idToken`, `idPayload`, `userInfo`, etc.
 - **Session Management**: 
-    - Delega la lógica compleja de recuperación y validación de sesión al `SsoSessionGuardService`.
-    - En `ngOnInit`, inicializa la suscripción a `isAuthenticated$`.
-- **Token Debugging**: Visualización y copiado de payloads de tokens para desarrollo.
+    - Integración profunda con `SsoSessionGuardService` para pings al IdP y recuperación silenciosa.
+    - Llamada a `ssoGuard.bootstrapAuthOnce({ doCheckAuth: true })` en el inicio.
+- **Token payloads**: Expone datos decodificados de los tokens y carga de UserInfo manual mediante paneles expansibles de Angular Material.
+- **UI Shell**: 
+    - `mat-toolbar` para el título dinámico (Client Name).
+    - Paneles expansibles (`mat-expansion-panel`) para visualizar la configuración, Access Token, ID Token y UserInfo.
+    - Botones con iconos para acciones comunes:
+        - **Logout**: Cierra sesión local y redirige al IdP.
+        - **Ver Access Token**: Imprime el token en consola.
+        - **Perfil de usuario**: Redirige al perfil del usuario en el IdP.
+        - **Refresh session**: Fuerza la renovación del token.
+        - **Ir a Más Pagos**: Redirige a la aplicación externa (`https://localhost:4203/?from=bod`).
 
 ## Logic Flow
 
 ### Initialization (`ngOnInit`)
-1.  **Logout Check**: Si la ruta es `/logout`:
-    -   Llama a `ssoGuard.markLogoutFromThisApp()` para evitar bucles de recuperación.
-    -   Ejecuta `logoffLocal()`.
-2.  **Auth Subscription**:
-    -   Se suscribe a `isAuthenticated$`.
-    -   Si está autenticado:
-        -   Llama a `ssoGuard.clearLogoutDisabledFlag()` para reactivar la protección de sesión.
-        -   Carga payloads de tokens y UserInfo.
-3.  **Initial Check**: Llama a `oidcSecurityService.checkAuth()` una única vez para procesar callbacks de login o verificar estado inicial.
+1.  **Logout Check**: Si la ruta empieza con `/logout`:
+    -   `ssoGuard.markLogoutFromThisApp()`: Evita que el guard intente recuperar la sesión.
+    -   `oidcSecurityService.logoffLocal()`: Limpia el estado local.
+2.  **Auth Subscription**: Suscribe a `isAuthenticated$`:
+    -   Actualiza la señal `isAuthenticated`.
+    -   Carga la configuración OIDC y actualiza etiquetas (`title`).
+    -   Si está autenticado: `ssoGuard.clearLogoutDisabledFlag()` para permitir recuperaciones futuras.
+    -   Carga payloads de Access y ID tokens.
+3.  **Bootstrap**: Ejecuta `ssoGuard.bootstrapAuthOnce({ doCheckAuth: true })` tras el `checkAuth` inicial de OIDC.
 
 ### Authentication Methods
-- `login()`: Trigger de `authorize`.
-- `logout()`: 
-    -   Marca `ssoGuard.markLogoutFromThisApp()`.
-    -   Ejecuta `logoff()` contra el IdP.
-- `refreshSession()`: Fuerza renovación de tokens vía refresh token.
+- `login()`: Llama a `authorize()`.
+- `logout()`: Marca logout en el guard y ejecuta `logoff()` en el IdP.
+- `refreshSession()`: Fuerza la renovación del token.
+- `goUserProfile()`: Redirige al perfil del usuario en el IdP.
+- `goToMasPagos()`: Salto externo a otra SPA (`https://localhost:4203`).
 
-### Integration with `SsoSessionGuard`
-El componente actúa como consumidor del guard, notificándole eventos críticos (como el logout explícito) y permitiendo que el guard gestione independientemente los pings al IdP y la recuperación de sesión en segundo plano.
+### Data Loading
+- `loadAccessTokenPayload()` / `loadIdTokenPayload()`: Decodifica tokens y actualiza las señales.
+- `loadUserInfo()`: Petición explícita al endpoint de UserInfo del IdP con Bearer token.

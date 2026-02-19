@@ -1,0 +1,22 @@
+<div class="datos-container">
+  <mat-card class="datos-card">
+    <mat-card-header>
+      <mat-card-title>Datos recibidos</mat-card-title>
+      <mat-card-subtitle>Parámetros de ruta y consulta</mat-card-subtitle>
+    </mat-card-header>
+    <mat-card-content>
+      <div class="param-row">
+        <span class="label">Sujeto:</span>
+        <span class="value">{{ sujeto() || 'N/A' }}</span>
+      </div>
+      <div class="param-row">
+        <span class="label">Cuenta:</span>
+        <span class="value">{{ cuenta() || 'N/A' }}</span>
+      </div>
+      <div class="param-row">
+        <span class="label">Valor (v):</span>
+        <span class="value">{{ valor() || 'N/A' }}</span>
+      </div>
+    </mat-card-content>
+  </mat-card>
+</div>

@@ -20,18 +20,19 @@ Guard avanzado y servicio de "Keep-Alive" para sesiones OIDC en SPAs. Su objetiv
     - Capacidad de obtener un token antiforgery del IdP antes de realizar operaciones críticas (como el ping), asegurando que las cookies de sesión sean aceptadas en entornos con protecciones CSRF estrictas.
 
 ## Configuration (`SsoSessionGuardAppConfig`)
-Interfaz simplificada para la configuración vía `provideSsoSessionGuard`:
-
 - **appNs**: Namespace para claves de storage (e.g., 'bod').
 - **pingPath**: Endpoint del IdP (default: `/api/session/ping`).
 - **minIntervalMs**: Throttle para evitar exceso de pings (default: 5000ms).
-- **onlyWhenAuthenticated**: Si `false`, el guard monitorea incluso si la SPA no tiene tokens (útil para detectar login en otra pestaña o recuperar sesión perdida).
-- **recoverMode**: Estrategia de recuperación (`none`, `promptNone`, `interactive`).
-- **forceLoginIfNoIdpSession**: Comportamiento tipo Office365 (login forzado si no hay cookie).
-- **antiforgery**: Objeto de configuración para el manejo de tokens CSRF:
-    - `enabled`: Activa la obtención del token.
-    - `path`: Endpoint del token (e.g., `/antiforgery/token`).
-    - `run`: Momento de ejecución (e.g., `beforePing`).
+- **events**: Eventos monitoreados: `['pageshow', 'focus']`.
+- **onlyWhenAuthenticated**: Si `false`, monitorea incluso sin tokens (permite detectar login externo).
+- **recoverMode**: Estrategia de recuperación: `promptNone` (usa iframe silencioso).
+- **antiforgery**:
+    - `enabled: true`.
+    - `path: '/antiforgery/token'`.
+    - `run: 'beforePing'`.
 
-## Usage
-Se integra en `app.config.ts` mediante `provideSsoSessionGuard(...)`. El provider se encarga de inyectar las dependencias y arrancar el servicio automáticamente (`APP_INITIALIZER`).
+## Core Methods
+- `start(options)`: Inicializa los hooks y la configuración.
+- `bootstrapAuthOnce(params)`: Realiza un ping inicial y opcionalmente un `checkAuth` para sincronizar el estado al arrancar.
+- `markLogoutFromThisApp()`: Setea un flag en `sessionStorage` para evitar que el guard intente recuperar la sesión tras un cierre voluntario.
+- `clearLogoutDisabledFlag()`: Limpia el flag de logout para permitir nuevas recuperaciones.

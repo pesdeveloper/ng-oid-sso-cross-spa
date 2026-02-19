@@ -17,5 +17,6 @@ npm run dist:mma
 - Instalacion de la libreria en un proyecto local 
 npm install S:\Source\NET\tokenserver.angular\ng-libs-local\mma-sso-session-guard-1.0.0.tgz
 
-
+- Desinstalacion de la libreria
+npm uninstall mma-sso-session-guard
 
