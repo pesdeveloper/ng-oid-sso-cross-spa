@@ -34,6 +34,7 @@ Ejemplo de instalacion desde archivo local
 
 ```bash
 npm install S:\Source\NET\tokenserver.angular\ng-libs-local\mma-sso-session-guard-1.0.0.tgz
+```
 
 Requisito: angular-auth-oidc-client v20.0.2 o superior.
 
@@ -121,3 +122,8 @@ export const appConfig: ApplicationConfig = {
     }),
   ],
 };
+```
+
+---
+
+## Uso
