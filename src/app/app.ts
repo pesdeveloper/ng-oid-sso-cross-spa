@@ -1,5 +1,4 @@
 import { CommonModule } from '@angular/common';
-import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Component, inject, OnDestroy, OnInit, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
@@ -7,13 +6,16 @@ import { MatDividerModule } from '@angular/material/divider';
 import { MatExpansionModule } from '@angular/material/expansion';
 import { MatIconModule } from '@angular/material/icon';
 import { MatToolbarModule } from '@angular/material/toolbar';
-import { Router, RouterOutlet } from '@angular/router';
-import { EventTypes, LoginResponse, OidcSecurityService, OpenIdConfiguration, PublicEventsService } from 'angular-auth-oidc-client';
-import { filter, forkJoin, Subscription, take } from 'rxjs';
+import { RouterOutlet } from '@angular/router';
+import { OpenIdConfiguration } from 'angular-auth-oidc-client';
+import { Subscription, firstValueFrom } from 'rxjs';
 
-// ✅ Guard/infra SSO
-import { SsoSessionGuardService } from '../../projects/mma-sso-session-guard/src/lib/sso-session-guard.service';
+// Facade
+import { AuthSessionFacade } from '../../projects/mma-sso-session-guard/src/lib/auth-session.facade';
 import { environment } from '../environments/environment';
+
+// Si tu AuthSessionState está en otro path, ajustalo
+import { AuthSessionState } from '../../projects/mma-sso-session-guard/src/lib/auth-session.state';
 
 @Component({
   selector: 'app-root',
@@ -32,240 +34,168 @@ import { environment } from '../environments/environment';
   styleUrl: './app.scss',
 })
 export class App implements OnInit, OnDestroy {
-  title = signal('...');
+  clientLabel = signal('...');
 
   isAuthenticated = signal(false);
   config = signal<Partial<OpenIdConfiguration>>({});
+
   accessToken = signal<string>('');
   accessPayload = signal<any | null>(null);
+
   idToken = signal<string>('');
   idPayload = signal<any | null>(null);
+
   userInfo = signal<any | null>(null);
   userInfoLoadedAt = signal<Date | null>(null);
 
   refreshing = signal(false);
 
-  private router = inject(Router);
-  private http = inject(HttpClient);
-  private readonly oidcSecurityService = inject(OidcSecurityService);
-
-  // ✅ SSO guard
-  private readonly ssoGuard = inject(SsoSessionGuardService);
-
+  private readonly auth = inject(AuthSessionFacade);
   private subs: Subscription[] = [];
 
   ngOnInit(): void {
-    const path = window.location.pathname || '';
-    console.log('BOD: App.ngOnInit() path=', path);
+    // 1) bootstrap del facade
+    this.auth.bootstrap();
 
-    // 0) Estado reactivo (primero)
+    // 2) hooks opcionales
     this.subs.push(
-      this.oidcSecurityService.isAuthenticated$.subscribe(({ isAuthenticated }) => {
-        this.isAuthenticated.set(isAuthenticated);
-
-        console.log(`>> ngOnInit isAuthenticated=${isAuthenticated}`);
-
-        // Siempre cargar config (incluso sin sesión)
-        this.oidcSecurityService.getConfiguration().pipe(take(1)).subscribe(cfg => {
-          this.config.set(cfg as OpenIdConfiguration);
-          this.updateClientLabel();
-        });
-
-        if (isAuthenticated) {
-          console.log(`>> ngOnInit isAuthenticated=${isAuthenticated} / this.ssoGuard.clearLogoutDisabledFlag();`);
-          console.log(`>> Proceso de autenticacion completado !!!!!!`);
-
-          this.ssoGuard.clearLogoutDisabledFlag();
-
-          this.loadAccessTokenPayload();
-          this.loadIdTokenPayload();
-
-        } else {
-          //this.updateClientLabel();
-        }
+      this.auth.onLogin$.subscribe(() => {
+        console.log('✅ login completado (state=true)');
       })
     );
 
-    // 1) Si estoy en /logout, corto todo y limpio local
-    if (path.startsWith('/logout')) {
-      this.isAuthenticated.set(false);
+    this.subs.push(
+      this.auth.onLogout$.subscribe(() => {
+        console.log('✅ logout completado (state=false)');
+      })
+    );
 
-      // ✅ Marcar logout para que el guard no intente recover
-      this.ssoGuard.markLogoutFromThisApp();
+    this.subs.push(
+      this.auth.onLogoutRequested$.subscribe(() => {
+        console.log('🟡 logout iniciado (siempre se ejecuta)');
+      })
+    );
 
-      this.oidcSecurityService.logoffLocal();
-      //this.oidcSecurityService.logoff().subscribe();
-      return;
-    }
+    // 3) state
+    this.subs.push(
+      this.auth.state$.subscribe((s: AuthSessionState) => {
+        this.isAuthenticated.set(!!s.isAuthenticated);
 
-    // 2) ✅ Arranque único: el guard hace ping + (si corresponde) checkAuth + recover(prompt=none)
-    //    Esto cubre el caso MasPagos -> BOD (carga inicial, sin focus/visibilitychange).
-    void this.ssoGuard.bootstrapAuthOnce({ doCheckAuth: true, router: this.router  })
-      .catch(err => console.warn('SSO bootstrap failed (ignored)', err));
+        if (s.config) {
+          this.config.set(s.config);
+          this.clientLabel.set(this.computeClientLabelFromState(s));
+        } else {
+          // por si arranca sin config aún
+          this.clientLabel.set('...');
+        }
+
+        this.accessToken.set(s.accessToken ?? '');
+        this.accessPayload.set(s.accessPayload ?? null);
+
+        this.idToken.set(s.idToken ?? '');
+        this.idPayload.set(s.idPayload ?? null);
+
+        this.userInfo.set(s.userInfo ?? null);
+        this.userInfoLoadedAt.set(s.userInfoLoadedAt ?? null);
+      })
+    );
   }
 
-
-  ngOnDestroy() {
+  ngOnDestroy(): void {
     for (const s of this.subs) s.unsubscribe();
     this.subs = [];
   }
 
-
   // --------------------------
   // UI actions
   // --------------------------
-  login() {
-    this.oidcSecurityService.authorize();
+
+  login(): void {
+    this.auth.login();
   }
 
-  logout() {
-    // ✅ Clave: marcar logout para evitar recover automático
-    this.ssoGuard.markLogoutFromThisApp();
-    this.oidcSecurityService.logoff().subscribe(result => console.log(result));
+  logout(): void {
+    this.auth.logout();
   }
 
-  mostrarAccessToken() {
-    this.oidcSecurityService.getAccessToken().subscribe(at => {
-      console.clear();
-      console.log(`AccessToken = ${at}`);
-    });
-  }
-
-  goUserProfile() {
-    this.oidcSecurityService.getConfiguration().pipe(take(1)).subscribe(s => {
-      const authority = (s as OpenIdConfiguration).authority;
-      const clientId = (s as OpenIdConfiguration).clientId;
-      const currentUrl = window.location.origin + window.location.pathname;
-      const returnUrl = encodeURIComponent(currentUrl);
-
-      const idpUrl = `${authority}/account/profile?client_id=${clientId}&returnUrl=${returnUrl}`;
-      window.location.href = idpUrl;
-    });
-  }
-
-  goToMasPagos() {
-    //window.location.href = 'https://localhost:4203/?from=bod';
-    window.location.href = environment.externalSites.masPagos;
-    //window.location.href = 'https://sb-pagosonline.malvinasargentinas.gob.ar/?from=bod';
-  }
-
-  refreshSession() {
+  refreshSession(): void {
     if (this.refreshing()) return;
+
     this.refreshing.set(true);
-
-    this.oidcSecurityService.forceRefreshSession().pipe(take(1)).subscribe({
-      next: _ => {
-        this.refreshing.set(false);
-        this.loadAccessTokenPayload();
-        this.loadIdTokenPayload();
-      },
-      error: err => {
-        this.refreshing.set(false);
-        console.error('Refresh ERROR', err);
-      },
+    this.auth.refresh().subscribe({
+      next: _ => this.refreshing.set(false),
+      error: _ => this.refreshing.set(false),
     });
   }
 
-  // --------------------------
-  // Panels loaders
-  // --------------------------
-  loadAccessTokenPayload() {
-    if (!this.isAuthenticated()) {
-      this.accessToken.set('');
-      this.accessPayload.set(null);
-      return;
-    }
-
-    this.oidcSecurityService.getAccessToken().pipe(take(1)).subscribe(at => this.accessToken.set(at ?? ''));
-    this.oidcSecurityService.getPayloadFromAccessToken().pipe(take(1)).subscribe(p => this.accessPayload.set(p ?? null));
+  goUserProfile(): void {
+    this.auth.goUserProfile();
   }
 
-  loadIdTokenPayload() {
-    if (!this.isAuthenticated()) {
-      this.idToken.set('');
-      this.idPayload.set(null);
-      return;
-    }
-
-    this.oidcSecurityService.getIdToken().pipe(take(1)).subscribe(it => this.idToken.set(it ?? ''));
-    this.oidcSecurityService.getPayloadFromIdToken().pipe(take(1)).subscribe(p => this.idPayload.set(p ?? null));
+  goToMasPagos(): void {
+    window.location.href = environment.externalSites.masPagos;
   }
 
-  loadUserInfo() {
-    if (!this.isAuthenticated()) {
-      this.userInfo.set(null);
-      this.userInfoLoadedAt.set(null);
-      return;
-    }
-
-    forkJoin([
-      this.oidcSecurityService.getAccessToken().pipe(take(1)),
-      this.oidcSecurityService.getConfiguration().pipe(take(1)),
-    ]).subscribe({
-      next: ([token, cfg]) => {
-        const authority = (cfg as OpenIdConfiguration)?.authority ?? '';
-        if (!token || !authority) {
-          this.userInfo.set({ error: 'missing token/authority' });
-          return;
-        }
-
-        const headers = new HttpHeaders({ Authorization: `Bearer ${token}` });
-        this.http.get(`${authority}/connect/userinfo`, { headers }).subscribe({
-          next: (data) => {
-            this.userInfo.set(data);
-            this.userInfoLoadedAt.set(new Date());
-          },
-          error: (err) => {
-            this.userInfo.set({
-              error: err?.message ?? 'UserInfo error',
-              status: err?.status,
-            });
-          },
-        });
-      },
-      error: (e) => this.userInfo.set({ error: e?.message ?? 'config/token error' }),
-    });
+  async mostrarAccessToken(): Promise<void> {
+    const at = await firstValueFrom(this.auth.getAccessToken());
+    console.clear();
+    console.log(`AccessToken = ${at}`);
   }
 
-  refreshUserInfo() {
-    this.userInfo.set(null);
-    this.userInfoLoadedAt.set(null);
-    this.loadUserInfo();
+  loadUserInfo(): void {
+    // Opción A: el facade hace el fetch y actualiza state.userInfo
+    this.auth.refreshUserInfo();
+  }
+
+  refreshUserInfo(): void {
+    // Ideal si existe en el facade (recomendado)
+    if ((this.auth as any).clearUserInfo) {
+      (this.auth as any).clearUserInfo();
+    } else {
+      // fallback: si no existe, al menos vuelve a pedir userinfo
+      // o podrías setear userInfo en null acá en App, pero eso rompe el patrón "solo state$"
+    }
+
+    this.auth.refreshUserInfo();
   }
 
   // --------------------------
   // Copy helpers
   // --------------------------
-  async copy(text?: string | null) {
+
+  async copy(text?: string | null): Promise<void> {
     if (!text) return;
-    try { await navigator.clipboard.writeText(text); } catch { /* no-op */ }
-  }
-
-  async copyJson(obj: any) {
-    if (!obj) return;
-    try { await navigator.clipboard.writeText(JSON.stringify(obj, null, 2)); } catch { /* no-op */ }
-  }
-
-  // --------------------------
-  // Label
-  // --------------------------
-  private updateClientLabel() {
-    if (!this.isAuthenticated()) {
-      this.oidcSecurityService.getConfiguration().pipe(take(1)).subscribe(cfg => {
-        this.title.set((cfg as OpenIdConfiguration).clientId ?? '');
-      });
-      return;
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      /* no-op */
     }
+  }
 
-    this.oidcSecurityService.getPayloadFromIdToken().pipe(take(1)).subscribe(idp => {
-      const claimName = (idp as any)?.client_name || (idp as any)?.azp || (idp as any)?.client_id;
-      if (claimName) {
-        this.title.set(claimName);
-        return;
-      }
-      this.oidcSecurityService.getConfiguration().pipe(take(1)).subscribe(cfg => {
-        this.title.set((cfg as OpenIdConfiguration).clientId ?? '');
-      });
-    });
+  async copyJson(obj: any): Promise<void> {
+    if (!obj) return;
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(obj, null, 2));
+    } catch {
+      /* no-op */
+    }
+  }
+
+  // --------------------------
+  // Label (desde el STATE)
+  // --------------------------
+
+  private computeClientLabelFromState(s: AuthSessionState): string {
+    // 1) si hay idPayload con nombre “humano”
+    const idp: any = s.idPayload ?? null;
+
+    if (idp?.client_name) return String(idp.client_name);
+    if (idp?.azp) return String(idp.azp);
+
+    // 2) fallback: config.clientId (siempre debería estar)
+    const cfg = s.config as any;
+    const clientId = cfg?.clientId ?? cfg?.client_id ?? null;
+
+    return clientId ? String(clientId) : 'No client id';
   }
 }

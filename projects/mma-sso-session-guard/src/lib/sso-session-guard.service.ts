@@ -685,6 +685,10 @@ export class SsoSessionGuardService {
     }
   }
 
+  public rememberReturnUrl(): void {
+    this.saveReturnUrlOnce();
+  }
+
   private saveReturnUrlOnce(): void {
     try {
       if (sessionStorage.getItem(this.returnUrlPendingKey) === '1') return;
@@ -696,12 +700,14 @@ export class SsoSessionGuardService {
       const u = new URL(href, window.location.origin);
       const path = u.pathname;
 
+      if (path === '/') return;
+      
       // ✅ VALIDACIÓN DE SEGURIDAD
       if (!this.isAllowedReturnPath(path)) {
         this.logWarn(`returnUrl rejected (not allowed): ${path}`);
         return;
       }
-            
+
       sessionStorage.setItem(this.returnUrlKey, href);
       sessionStorage.setItem(this.returnUrlPendingKey, '1');
       this.logDebug(`returnUrl saved: ${href}`);

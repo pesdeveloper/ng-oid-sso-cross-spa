@@ -1,5 +1,5 @@
 <mat-toolbar color="primary">
-  <span>{{title()}}</span>
+  <span>{{ clientLabel() }}</span>
 </mat-toolbar>
 
 <mat-divider></mat-divider>
@@ -12,17 +12,26 @@
           <mat-icon fontSet="material-icons">logout</mat-icon>
           Logout
         </button>
+
         <button mat-raised-button color="accent" (click)="mostrarAccessToken()">
           <mat-icon fontSet="material-icons">visibility</mat-icon>
-          Ver Access Token > consola
+          Ver Access Token &gt; consola
         </button>
+
         <button mat-raised-button color="primary" (click)="goUserProfile()">
           <mat-icon fontSet="material-icons">person</mat-icon>
           Perfil de usuario
         </button>
 
-        <button mat-raised-button color="primary" (click)="refreshSession()" [disabled]="refreshing()">
-          <mat-icon fontSet="material-icons" [class.spin]="refreshing()">autorenew</mat-icon>
+        <button
+          mat-raised-button
+          color="primary"
+          (click)="refreshSession()"
+          [disabled]="refreshing()"
+        >
+          <mat-icon fontSet="material-icons" [class.spin]="refreshing()">
+            autorenew
+          </mat-icon>
           {{ refreshing() ? 'Refreshing…' : 'Refresh session' }}
         </button>
       </div>
@@ -49,7 +58,7 @@
   <mat-divider></mat-divider>
   <br />
 
-  <!-- Configuración: normal -->
+  <!-- Configuración -->
   <mat-expansion-panel>
     <mat-expansion-panel-header>
       <mat-panel-title>
@@ -62,8 +71,8 @@
 
   <br />
 
-  <!-- Access Token: estilo info -->
-  <mat-expansion-panel class="panel-info" (opened)="loadAccessTokenPayload()">
+  <!-- Access Token -->
+  <mat-expansion-panel class="panel-info">
     @let atp = accessPayload();
 
     <mat-expansion-panel-header>
@@ -72,7 +81,11 @@
         Access Token (decoded)
       </mat-panel-title>
       <mat-panel-description>
-        @if (atp) { exp: {{ (atp.exp * 1000) | date:'medium' }} } @else { &nbsp; }
+        @if (atp?.exp) {
+          exp: {{ (atp.exp * 1000) | date:'medium' }}
+        } @else {
+          &nbsp;
+        }
       </mat-panel-description>
     </mat-expansion-panel-header>
 
@@ -87,25 +100,32 @@
           Copiar payload
         </button>
       </div>
+
       <pre>{{ atp | json }}</pre>
     } @else {
-      <p style="opacity:.7">Abrí el panel (y logueate) para cargar el payload del access token.</p>
+      <p style="opacity:.7">
+        Logueate para ver el payload del access token.
+      </p>
     }
   </mat-expansion-panel>
 
   <br />
 
-  <!-- ID Token: estilo info -->
-  <mat-expansion-panel class="panel-info" (opened)="loadIdTokenPayload()">
+  <!-- ID Token -->
+  <mat-expansion-panel class="panel-info">
     @let pid = idPayload();
 
     <mat-expansion-panel-header>
       <mat-panel-title>
-         <mat-icon fontSet="material-icons">verified_user</mat-icon>
+        <mat-icon fontSet="material-icons">verified_user</mat-icon>
         ID Token (decoded)
       </mat-panel-title>
       <mat-panel-description>
-        @if (pid) { exp: {{ (pid.exp * 1000) | date:'medium' }} } @else { &nbsp; }
+        @if (pid?.exp) {
+          exp: {{ (pid.exp * 1000) | date:'medium' }}
+        } @else {
+          &nbsp;
+        }
       </mat-panel-description>
     </mat-expansion-panel-header>
 
@@ -120,13 +140,16 @@
           Copiar payload
         </button>
       </div>
+
       <pre>{{ pid | json }}</pre>
     } @else {
-      <p style="opacity:.7">Abrí el panel (y logueate) para cargar el payload del ID token.</p>
+      <p style="opacity:.7">
+        Logueate para ver el payload del ID token.
+      </p>
     }
   </mat-expansion-panel>
 
-   <br />
+  <br />
 
   <!-- UserInfo -->
   <mat-expansion-panel class="panel-info" (opened)="loadUserInfo()">
@@ -138,7 +161,9 @@
       <mat-panel-description>
         @if (userInfo()) {
           actualizado: {{ userInfoLoadedAt() | date:'mediumTime' }}
-        } @else { &nbsp; }
+        } @else {
+          &nbsp;
+        }
       </mat-panel-description>
     </mat-expansion-panel-header>
 
@@ -153,6 +178,7 @@
           Copiar JSON
         </button>
       </div>
+
       <pre>{{ userInfo() | json }}</pre>
     } @else {
       <p style="opacity:.7">
@@ -160,7 +186,6 @@
       </p>
     }
   </mat-expansion-panel>
-
 
   <router-outlet></router-outlet>
 </div>
