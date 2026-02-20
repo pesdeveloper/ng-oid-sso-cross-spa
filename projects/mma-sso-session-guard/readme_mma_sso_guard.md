@@ -1,98 +1,123 @@
-# 🛡️ Guía de Integración: MMA SSO Session Guard
+# mma-sso-session-guard
 
-Librería corporativa para la gestión de sesiones sincronizadas en arquitecturas **Single Sign-On (SSO)** con Angular.
+Librería para **mejorar la sesión SSO** en SPAs Angular que usan `angular-auth-oidc-client`, especialmente cuando:
+- Tenés **múltiples SPAs** (ej: BOD y MásPagos) contra el **mismo IdP**
+- Querés que al volver a una SPA, se valide rápido si hay **sesión en el IdP** (cookie) y se recupere con `prompt=none`
+- Querés evitar **loops** y manejar bien **logout**, deep-links y “returnUrl”.
+
+Incluye:
+- `provideSsoSessionGuard(...)` (provider principal)
+- `SsoSessionGuardService` (infra/guard)
+- `AuthSessionFacade` (fachada simple para apps: `bootstrap()`, `login()`, `logout()`, `refresh()`, `state$`, `onLogin$`, etc.)
 
 ---
 
-## 📋 Descripción General
-El **MMA SSO Session Guard** es un centinela diseñado para Angular 19/20. Revalida la sesión contra el IdP mediante un "ping" activo activado por eventos del navegador como `focus`, `pageshow` y `visibilitychange`. Su objetivo es evitar que la aplicación mantenga sesiones locales activas cuando la sesión en el servidor de identidad ya ha expirado o ha sido cerrada en otra pestaña.
+## Requisitos
+
+- Angular (standalone / `ApplicationConfig`)  
+- `angular-auth-oidc-client` configurado y funcionando (PKCE/code flow recomendado)
+- Un IdP accesible (misma autoridad para todas las SPAs que comparten SSO)
+- Si vas a usar `pingPath` contra el IdP: CORS + cookies cross-site correctamente configuradas en el IdP
 
 ---
 
-## 🚀 1. Instalación
-Para instalar la librería desde el repositorio de red local, ejecuta el siguiente comando en la raíz de tu proyecto:
+## Instalación
+
+### 1) Instalar dependencia
+
+> Si está como paquete npm (ej. interno):  
+`npm i mma-sso-session-guard`
+
+Si lo consumís como workspace/lib local, importalo por path o alias según tu repo.
+
+Ejemplo de instalacion desde archivo local
 
 ```bash
 npm install S:\Source\NET\tokenserver.angular\ng-libs-local\mma-sso-session-guard-1.0.0.tgz
+
 Requisito: angular-auth-oidc-client v20.0.2 o superior.
 
-⚙️ 2. Configuración Global (app.config.ts)
-Registra el provider en tu app.config.ts. Es vital definir un appNs (namespace) único para evitar colisiones en el almacenamiento del navegador.
+---
 
+## Conceptos clave
 
+### `bootstrap()`
+Se llama **una vez** al iniciar la app (en `ngOnInit` del `App`).
+Hace:
+- Lee config del `OidcSecurityService`
+- Maneja ruta especial `/logout` (limpia sesión local y evita recover)
+- Ejecuta un “arranque único” con `bootstrapAuthOnce(...)`:
+  - ping al IdP (si aplica)
+  - `checkAuth()`
+  - `recover(prompt=none)` una sola vez (anti-loop)
+
+### Logout seguro
+El logout marca un flag (“logout disabled”) para que el guard **no intente recover** inmediatamente.
+
+### ReturnUrl / deep-links
+La lib guarda una returnUrl para volver a la pantalla original, con validación simple por **prefijos permitidos** (ej: `['/datos']`).
+No valida querystring/fragment por defecto (simple y práctico).
+
+---
+
+## Configuración: `provideSsoSessionGuard(...)`
+
+Ejemplo típico en `app.config.ts`:
+
+```ts
+import { ApplicationConfig, provideZoneChangeDetection } from '@angular/core';
+import { provideRouter } from '@angular/router';
+import { provideHttpClient, withFetch, withInterceptors, withXsrfConfiguration } from '@angular/common/http';
+import { provideAuth, authInterceptor } from 'angular-auth-oidc-client';
 import { provideSsoSessionGuard, SimpleLogLevel } from 'mma-sso-session-guard';
+
+import { routes } from './app.routes';
+import { authConfig } from './auth/auth.config';
+import { xsrfCrossSiteInterceptor } from './auth/xsrf-cross-site.interceptor';
 
 export const appConfig: ApplicationConfig = {
   providers: [
-    // ... otros providers (provideAuth, provideHttpClient, etc.)
+    provideZoneChangeDetection({ eventCoalescing: true }),
+    provideRouter(routes),
+
+    // OIDC
+    provideAuth(authConfig),
+
+    provideHttpClient(
+      withFetch(),
+      withXsrfConfiguration({
+        cookieName: 'XSRF-TOKEN',
+        headerName: 'X-XSRF-TOKEN',
+      }),
+      withInterceptors([authInterceptor(), xsrfCrossSiteInterceptor]),
+    ),
+
+    // SSO Session Guard
     provideSsoSessionGuard({
-      appNs: 'mma-app-portal',        // Identificador único de la App
-      pingPath: '/api/session/ping',  // Endpoint de validación en IdP
-      minIntervalMs: 5000,            // Tiempo mínimo entre pings
-      events: ['pageshow', 'focus'],  // Eventos de revalidación
-      recoverMode: 'promptNone',      // Login silencioso si hay cookie IdP
+      appNs: 'bod',                 // ✅ importante: namespace único por app (anti-loop)
+      pingPath: '/api/session/ping', // endpoint en IdP para validar cookie/sesión
+      minIntervalMs: 5000,
+
+      // Eventos que disparan pings/validación cuando el user vuelve a la pestaña
+      // Recomendado: pageshow + focus (simple y robusto)
+      events: ['pageshow', 'focus'],
+
+      onlyWhenAuthenticated: false,  // si querés ping incluso sin tokens locales
+      recoverMode: 'promptNone',     // recupera con authorize(prompt=none) una vez
+      forceLoginIfNoIdpSession: false,
+
+      logPrefix: 'BOD-SSO',
+      defaultLogLevel: SimpleLogLevel.Debug,
+
+      // Opcional: antiforgery (si tu IdP lo requiere para endpoints protegidos)
       antiforgery: {
         enabled: true,
-        path: '/antiforgery/token',   // Warm-up de seguridad (XSRF)
-        run: 'beforePing'
+        path: '/antiforgery/token',
+        run: 'beforePing', // 'beforePing' | 'beforeRecover' | 'bootstrap'
       },
-      defaultLogLevel: SimpleLogLevel.Info
-    })
-  ]
+
+      // Seguridad returnUrl/deep-links
+      allowedReturnUrlPrefixes: ['/datos'], // ✅ /datos/* permitido
+    }),
+  ],
 };
-
----
-
-💻 3. Implementación en el Componente Principal (app.ts): 
-- El componente principal debes sincronizar el comportamiento de tu aplicación con el estado del guard en el componente principal.
-
-- Inicialización y Reactivación
-- En el ngOnInit, configura el bootstrap y asegúrate de reactivar el guard tras un login exitoso:
-
-ngOnInit(): void {
-  // 1. Monitorear cambios en la autenticación
-  this.oidcSecurityService.isAuthenticated$.subscribe(({ isAuthenticated }) => {
-    if (isAuthenticated) {
-      // ✅ Si se autentica, reactivamos el guard (limpiamos flag de logout previo)
-      this.ssoGuard.clearLogoutDisabledFlag();
-    }
-  });
-
-  // 2. Ejecutar validación inicial (Bootstrap)
-  // Verifica sesión en el IdP y procesa la autenticación inicial
-  this.oidcSecurityService.checkAuth().subscribe(() => {
-    void this.ssoGuard.bootstrapAuthOnce({ doCheckAuth: true });
-  });
-
-  // 3. Manejo de ruta /logout personalizada
-  if (window.location.pathname.startsWith('/logout')) {
-    this.ssoGuard.markLogoutFromThisApp();
-    this.oidcSecurityService.logoffLocal();
-  }
-}
-
-# Proceso de Logout Seguro. Es obligatorio llamar a markLogoutFromThisApp() antes de iniciar el cierre de sesión para evitar que el guard - - intente re-autenticar al usuario mientras la página se descarga o redirige.
-
-logout() {
-  // A) Bloquear al guard para evitar recuperación accidental de sesión
-  this.ssoGuard.markLogoutFromThisApp();
-
-  // B) Ejecutar cierre de sesión global en el IdP
-  this.oidcSecurityService.logoff().subscribe({
-    next: (res) => console.log('Cerrando sesión en IdP...', res),
-    error: (err) => {
-      console.error('Error en logoff, limpiando local', err);
-      this.oidcSecurityService.logoffLocal();
-    }
-  });
-}
-
----
-
-🛠️ Notas Técnicas
-CORS: El servidor de identidad (IdP) debe estar configurado para permitir peticiones con credenciales (withCredentials: true) desde el dominio de esta aplicación.
-
-Antiforgery: Si habilitas el antiforgery, el guard garantiza que se obtenga el token de seguridad antes de realizar cualquier ping de sesión.
-
-Persistencia: La librería utiliza sessionStorage para gestionar los flags de anti-bucle y estado de logout.
-
