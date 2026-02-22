@@ -3,7 +3,9 @@
 {
   "extends": "../../tsconfig.json",
   "compilerOptions": {
+    "baseUrl": ".",
     "outDir": "../../out-tsc/lib",
+    "rootDir": "src",
     "sourceMap": true,
     "inlineSources": true,
     "declaration": true,

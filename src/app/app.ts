@@ -9,13 +9,9 @@ import { MatToolbarModule } from '@angular/material/toolbar';
 import { RouterOutlet } from '@angular/router';
 import { OpenIdConfiguration } from 'angular-auth-oidc-client';
 import { Subscription, firstValueFrom } from 'rxjs';
-
-// Facade
-import { AuthSessionFacade } from '../../projects/mma-sso-session-guard/src/lib/auth-session.facade';
 import { environment } from '../environments/environment';
 
-// Si tu AuthSessionState está en otro path, ajustalo
-import { AuthSessionState } from '../../projects/mma-sso-session-guard/src/lib/auth-session.state';
+import { AuthSessionFacade, AuthSessionState } from 'mma-sso-session-guard';
 
 @Component({
   selector: 'app-root',

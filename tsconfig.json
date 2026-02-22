@@ -2,14 +2,15 @@
 /* To learn more about Angular compiler options: https://angular.dev/reference/configs/angular-compiler-options. */
 {
   "compileOnSave": false,
-  "baseUrl": "./",
-  "compilerOptions": {
+   "compilerOptions": {
+    "baseUrl": ".",
     "strict": true,
     "noImplicitOverride": true,
+    "moduleResolution": "bundler",
     "noPropertyAccessFromIndexSignature": true,
     "paths": {
       "mma-sso-session-guard": [
-        "projects/mma-sso-session-guard/src/public-api.ts" // <--- Apunta al fuente
+        "./projects/mma-sso-session-guard/src/public-api.ts" // <--- Apunta al fuente
         ]
     },
     "noImplicitReturns": true,

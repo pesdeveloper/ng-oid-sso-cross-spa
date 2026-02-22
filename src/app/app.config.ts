@@ -7,8 +7,8 @@ import { authConfig } from './auth/auth.config';
 import { authInterceptor, provideAuth } from 'angular-auth-oidc-client';
 import { xsrfCrossSiteInterceptor } from './auth/xsrf-cross-site.interceptor';
 import { catchError, firstValueFrom, map, of } from 'rxjs';
-import { provideSsoSessionGuard } from '../../projects/mma-sso-session-guard/src/lib/sso-session-guard.providers';
-import { SimpleLogLevel } from '../../projects/mma-sso-session-guard/src/lib/sso-session-guard.service';
+import { provideSsoSessionGuard, SimpleLogLevel } from 'mma-sso-session-guard';
+
 
 export const appConfig: ApplicationConfig = {
   providers: [

@@ -3,8 +3,6 @@ import { environment } from '../../environments/environment';
 
 export const authConfig: PassedInitialConfig = {
   config: {
-            //authority: 'https://idp.malvinasargentinas.gob.ar',
-            //authority: 'https://sb-idp.malvinasargentinas.gob.ar',
             authority: environment.authConfig.authority,
             issValidationOff: true,
             strictIssuerValidationOnWellKnownRetrievalOff: true,
@@ -29,8 +27,6 @@ export const authConfig: PassedInitialConfig = {
             logLevel: LogLevel.Debug,
             // 🔑 Muy importante: el interceptor solo agrega el token si la URL empieza con uno de estos prefijos
             // secureRoutes: [
-            //   'https://sb-comon-api.malvinasargentinas.gob.ar',
-            //   'https://sb-pagosonline.malvinasargentinas.gob.ar/tasas'
             // ],            
         }
 }
