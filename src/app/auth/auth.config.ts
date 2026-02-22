@@ -15,14 +15,14 @@ export const authConfig: PassedInitialConfig = {
 
             responseType: 'code',
             startCheckSession: false,
-            silentRenew: false,
+            silentRenew: true,
             useRefreshToken: true,
             ignoreNonceAfterRefresh: true,
             historyCleanupOff: false,
             triggerRefreshWhenIdTokenExpired: true,
             autoUserInfo: true, 
             renewUserInfoAfterTokenRenew: true,
-            silentRenewUrl: `${window.location.origin}/silent-renew.html`,
+            //silentRenewUrl: `${window.location.origin}/silent-renew.html`,
             renewTimeBeforeTokenExpiresInSeconds: 120,
             logLevel: LogLevel.Debug,
             // 🔑 Muy importante: el interceptor solo agrega el token si la URL empieza con uno de estos prefijos
