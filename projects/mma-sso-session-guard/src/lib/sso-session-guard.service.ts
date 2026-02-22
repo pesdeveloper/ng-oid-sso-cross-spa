@@ -245,8 +245,9 @@ export class SsoSessionGuardService {
       await this.ensureAntiforgeryOnce('bootstrap');
     }
 
-    const hasIdp = await this.safePing('bootstrap');
-    if (!hasIdp) {
+    const ping = await this.safePing('bootstrap');
+
+    if (ping === false) {
       await this.handleNoIdpSession('bootstrap');
       return;
     }
@@ -262,6 +263,7 @@ export class SsoSessionGuardService {
       }      
 
       if (!resp?.isAuthenticated) {
+        // ✅ ping es true | null acá, ambos habilitan recover
         await this.handleHasIdpButNoLocalAuth('bootstrap');
       }
     }
@@ -415,10 +417,10 @@ export class SsoSessionGuardService {
         }
 
         this.logDebug(`resume -> ping IdP session... reason=${reason}`);
-        const hasIdp = await this.safePing(`resume:${reason}`);
-        this.logDebug(`resume ping hasIdpSession=${hasIdp}`);
+        const ping = await this.safePing(`resume:${reason}`);
+        this.logDebug(`resume ping result=${ping} (true=hasIdp, false=noIdp, null=unknown)`);
 
-        if (!hasIdp) {
+        if (ping === false) {
           await this.handleNoIdpSession(`resume:${reason}`);
           return;
         }
@@ -566,12 +568,19 @@ export class SsoSessionGuardService {
   // Ping (IdP cookie)
   // -----------------------------
 
-  private async safePing(context: string): Promise<boolean> {
+  private async safePing(context: string): Promise<boolean|null> {
     try {
       const authority = await this.getAuthorityOnce();
       if (!authority) {
         this.logWarn(`safePing: missing authority. ctx=${context}`);
         return true; // no rompas UX
+      }
+
+      // ✅ Safari + cross-site: NO usar ping por fetch (ITP puede bloquear cookies)
+      // Devolvemos null = "inconcluso/no confiable"
+      if (this.isSafari() && this.isCrossSite(authority)) {
+        this.logWarn(`safePing: skipped on Safari (cross-site). ctx=${context}`);
+        return null;
       }
 
       const url = this.buildPingUrl(authority);
@@ -619,6 +628,27 @@ export class SsoSessionGuardService {
       url += `${sep}ts=${Date.now()}`;
     }
     return url;
+  }
+
+  private isSafari(): boolean {
+    // Evita confundir Chrome iOS (que también reporta Safari-ish).
+    const ua = navigator.userAgent;
+    const isApple = /Macintosh|iPhone|iPad|iPod/.test(ua);
+    const isSafari = /Safari/.test(ua) && !/Chrome|CriOS|Edg|EdgiOS|OPR|FxiOS/.test(ua);
+    return isApple && isSafari;
+  }
+
+  private isCrossSite(authority: string): boolean {
+    try {
+      const a = new URL(authority);
+      const here = window.location;
+
+      // Mínimo viable: host distinto => potencialmente cross-site.
+      // (Para tu caso localhost vs sb-idp..., esto alcanza.)
+      return a.host.toLowerCase() !== here.host.toLowerCase();
+    } catch {
+      return true;
+    }
   }
 
   // -----------------------------
