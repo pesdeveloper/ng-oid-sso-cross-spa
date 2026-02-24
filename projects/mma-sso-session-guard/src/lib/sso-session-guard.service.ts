@@ -724,11 +724,20 @@ export class SsoSessionGuardService {
       if (sessionStorage.getItem(this.returnUrlPendingKey) === '1') return;
 
       const href = window.location.href;
+
+      console.log('[SSO] saveReturnUrlOnce()', {
+        href: window.location.href,
+        path: window.location.pathname,
+        pending: sessionStorage.getItem(this.returnUrlPendingKey),
+        canSessionStorage: (() => { try { sessionStorage.setItem('__t','1'); sessionStorage.removeItem('__t'); return true; } catch { return false; } })(),
+      });      
+
       if (this.isOidcCallbackUrl(href)) return;
       if (window.location.pathname.startsWith('/logout')) return;
 
       const u = new URL(href, window.location.origin);
       const path = u.pathname;
+      const target = u.pathname + u.search + u.hash; // 👈 no depende del origin
 
       if (path === '/') return;
       
@@ -738,9 +747,11 @@ export class SsoSessionGuardService {
         return;
       }
 
-      sessionStorage.setItem(this.returnUrlKey, href);
+      sessionStorage.setItem(this.returnUrlKey, target);
       sessionStorage.setItem(this.returnUrlPendingKey, '1');
-      this.logDebug(`returnUrl saved: ${href}`);
+
+
+      this.logDebug(`returnUrl saved: ${target}`);
     } catch {
       /* no-op */
     }
@@ -757,15 +768,22 @@ export class SsoSessionGuardService {
 
   private consumeReturnUrl(): string | null {
     try {
-      if (sessionStorage.getItem(this.returnUrlPendingKey) !== '1') return null;
+      const pending = sessionStorage.getItem(this.returnUrlPendingKey);
+      const stored = sessionStorage.getItem(this.returnUrlKey);
 
-      const href = sessionStorage.getItem(this.returnUrlKey) || '';
+      console.log('[SSO] consumeReturnUrl()', {
+        pending,
+        stored,
+      });
 
-      // ✅ limpieza one-shot ANTES de cualquier navegación (anti-loop)
+      // ✅ Consumir si HAY returnUrlKey, aunque pending falte (más robusto en Safari/Mac)
+      const target = stored || '';
+
+      // ✅ limpieza one-shot SIEMPRE (anti-loop)
       sessionStorage.removeItem(this.returnUrlPendingKey);
       sessionStorage.removeItem(this.returnUrlKey);
 
-      return href || null;
+      return target || null;
     } catch {
       return null;
     }
@@ -773,22 +791,35 @@ export class SsoSessionGuardService {
 
   public tryRestoreAfterLogin(router: Router, opts?: { replaceUrl?: boolean }): void {
     try {
-      const href = this.consumeReturnUrl();
+      const saved = this.consumeReturnUrl();
 
-      console.log(`>>>> tryRestoreAfterLogin href = ${href}`)
-      if (!href) return;
+      console.log(`>>>> tryRestoreAfterLogin saved = ${saved}`);
+      if (!saved) return;
 
-      const u = new URL(href, window.location.origin);
-      const path = u.pathname;
+      // ✅ Acepta:
+      // - target relativo: "/clientes/123?x=1#sec"
+      // - href absoluto:   "https://localhost:4205/clientes/123?x=1#sec"
+      let target = '';
+      try {
+        // Si es absoluto, lo normalizamos a path+search+hash
+        const u = new URL(saved);
+        target = u.pathname + u.search + u.hash;
+      } catch {
+        // Si es relativo, lo usamos tal cual (pero normalizamos con origin)
+        const u = new URL(saved, window.location.origin);
+        target = u.pathname + u.search + u.hash;
+      }
+
+      const pathOnly = target.split('?')[0].split('#')[0];
 
       // ✅ guard mínimo: jamás restaurar a rutas internas de auth/logout
       if (
-        path.startsWith('/auth/callback') ||
-        path.startsWith('/auth/restore') ||
-        path.startsWith('/auth/unauthorized') ||
-        path.startsWith('/logout')
+        pathOnly.startsWith('/auth/callback') ||
+        pathOnly.startsWith('/auth/restore') ||
+        pathOnly.startsWith('/auth/unauthorized') ||
+        pathOnly.startsWith('/logout')
       ) {
-        this.logDebug(`restore ignored (auth route): ${path}`);
+        this.logDebug(`restore ignored (auth route): ${pathOnly}`);
         return;
       }
 
@@ -797,22 +828,14 @@ export class SsoSessionGuardService {
         window.location.search +
         window.location.hash;
 
-      const target = u.pathname + u.search + u.hash;
       if (current === target) return;
 
-      const queryParams: Record<string, string> = {};
-      u.searchParams.forEach((v, k) => (queryParams[k] = v));
-
-      const fragment = u.hash ? u.hash.substring(1) : undefined;
-
       this.logDebug(`restore -> ${target}`);
+      console.log(
+        `>>> tryRestoreAfterLogin navigateByUrl -> ${target} replaceUrl=${opts?.replaceUrl ?? true}`
+      );
 
-      console.log(`>>> tryRestoreAfterLogin navigate -> ${target} queryParams=${JSON.stringify(queryParams)} fragment=${fragment} replaceUrl=${opts?.replaceUrl ?? true}`)
-      void router.navigate([u.pathname], {
-        queryParams,
-        fragment,
-        replaceUrl: opts?.replaceUrl ?? true,
-      });
+      void router.navigateByUrl(target, { replaceUrl: opts?.replaceUrl ?? true });
     } catch (e) {
       this.logWarn(`restore failed (ignored).`, e);
     }

@@ -43,7 +43,7 @@ export const appConfig: ApplicationConfig = {
         path: '/antiforgery/token',
         run: 'beforePing', // o 'beforeRecover' o 'bootstrap' o 'beforePing'
       },
-      allowedReturnUrlPrefixes: [ '/datos' ],      
+      allowedReturnUrlPrefixes: [ '/datos','/checkout-external' ],      
     }),
   ]
 };
