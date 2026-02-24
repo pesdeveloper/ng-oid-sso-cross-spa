@@ -7,8 +7,9 @@
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
     "test": "ng test",
-    "build:mma": "ng build mma-sso-session-guard && cd dist/mma-sso-session-guard && npm pack",
-    "dist:mma": "npm run build:mma && cmd /c \"if not exist S:\\Source\\NET\\tokenserver.angular\\ng-libs-local mkdir S:\\Source\\NET\\tokenserver.angular\\ng-libs-local\" && cmd /c \"copy /y dist\\mma-sso-session-guard\\*.tgz S:\\Source\\NET\\tokenserver.angular\\ng-libs-local\\\""
+    "build:mma": "ng build mma-sso-session-guard",
+    "pack:mma": "npm run build:mma && npm pack ./dist/mma-sso-session-guard",
+    "dist:mma": "npm run pack:mma && node ./scripts/copy-tgz.mjs"
   },
   "prettier": {
     "printWidth": 100,
