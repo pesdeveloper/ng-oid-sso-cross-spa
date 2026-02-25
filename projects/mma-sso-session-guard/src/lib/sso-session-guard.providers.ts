@@ -5,22 +5,6 @@
 //
 // Uso: en app.config.ts => providers: [ provideSsoSessionGuard({ ... }) ]
 
-//** 1) Cómo lo usás en tu App (BOD) sin “interferir”
-//** En tu logout() llamá una línea extra para que el guard no intente recuperar:
-/* TS
-logout() {
-  this.ssoGuard.markLogoutFromThisApp(); // <- agrega esto
-  this.oidcSecurityService.logoff().subscribe();
-}
-*/
-
-//** Cuando autenticás OK (o en tu subscribe de isAuthenticated$ cuando true), limpiá el flag “logoutDisabled”:
-/* TS
-if (isAuthenticated) {
-  this.ssoGuard.clearLogoutDisabledFlag();
-}
-*/
-
 import {
   EnvironmentProviders,
   InjectionToken,
@@ -28,16 +12,17 @@ import {
   provideAppInitializer,
   inject,
 } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
 import { OidcSecurityService } from 'angular-auth-oidc-client';
-import { map, take, firstValueFrom, of } from 'rxjs';
+import { catchError } from 'rxjs/operators';
+import { firstValueFrom, map, of, take } from 'rxjs';
+
 import {
   RecoverMode,
   SimpleLogLevel,
   SsoSessionGuardOptions,
   SsoSessionGuardService,
 } from './sso-session-guard.service';
-import { catchError } from 'rxjs/operators';
-import { HttpClient } from '@angular/common/http';
 
 /**
  * Config “para terceros”: mínima, clara, sin pensar demasiado.
@@ -54,10 +39,10 @@ export interface SsoSessionGuardAppConfig {
   cacheBuster?: boolean; // default true
 
   /** (opcional) Throttle entre pings */
-  minIntervalMs?: number; // default 1500
+  minIntervalMs?: number; // default 5000
 
   /** (opcional) Solo ping si la SPA cree que está autenticada */
-  onlyWhenAuthenticated?: boolean; // default true
+  onlyWhenAuthenticated?: boolean; // default false
 
   /**
    * “Office365-like”
@@ -83,6 +68,7 @@ export interface SsoSessionGuardAppConfig {
   /** Nivel default si no se puede leer cfg.logLevel */
   defaultLogLevel?: SimpleLogLevel;
 
+  /** Antiforgery warm-up (best effort) */
   antiforgery?: {
     enabled?: boolean;
     /** default '/antiforgery/token' */
@@ -91,7 +77,22 @@ export interface SsoSessionGuardAppConfig {
     run?: 'beforePing' | 'beforeRecover' | 'bootstrap';
   };
 
-  allowedReturnUrlPrefixes?: string[];
+  /**
+   * ✅ OPCIONAL: si querés que el provider dispare el bootstrapAuthOnce() automáticamente.
+   * Default: false (recomendado si tu app ya lo hace en el Facade).
+   *
+   * Importante: NO bloquea el arranque (fire-and-forget).
+   */
+  autoBootstrap?: boolean;
+
+  /**
+   * Si autoBootstrap=true:
+   * - true: llama bootstrapAuthOnce({ doCheckAuth: true })
+   * - false: llama bootstrapAuthOnce({ doCheckAuth: false })
+   *
+   * Default: true
+   */
+  autoBootstrapDoCheckAuth?: boolean;
 }
 
 /** Token para inyectar la config */
@@ -101,7 +102,7 @@ export const SSO_SESSION_GUARD_CONFIG = new InjectionToken<SsoSessionGuardAppCon
 
 /**
  * Provider “único” para apps: instala el guard apenas levanta la app.
- * Importante: por defecto NO bloquea el bootstrap (no devuelve Promise/Observable).
+ * Importante: por defecto NO bloquea el bootstrap.
  */
 export function provideSsoSessionGuard(config: SsoSessionGuardAppConfig): EnvironmentProviders {
   return makeEnvironmentProviders([
@@ -143,29 +144,29 @@ export function provideSsoSessionGuard(config: SsoSessionGuardAppConfig): Enviro
               run: cfg.antiforgery.run ?? 'beforePing',
               loader: (url: string) =>
                 firstValueFrom(
-                  http.get(url, {
-                    withCredentials: true,
-                    responseType: 'text' as const,
-                  }).pipe(
-                    map(() => void 0),
-                    catchError(() => of(void 0))
-                  )
+                  http
+                    .get(url, {
+                      withCredentials: true,
+                      responseType: 'text' as const,
+                    })
+                    .pipe(
+                      map(() => void 0),
+                      catchError(() => of(void 0))
+                    )
                 ),
             }
           : undefined,
-
-        allowedReturnUrlPrefixes: cfg.allowedReturnUrlPrefixes,          
       };
 
       // ✅ instala hooks (pageshow/focus/visibilitychange), throttle, inFlight, etc.
       guard.start(opts);
 
-      // OJO: si querés que también haga “bootstrap” (ping + checkAuth) automáticamente,
-      // lo ideal es que sea opt-in. Si tu app YA hace checkAuth en otro lado,
-      // NO lo llames para no duplicar.
-      //
-      // return guard.bootstrapAuthOnce(); // <- esto sí bloquearía si devuelve Promise/Observable
-      //
+      // ✅ opcional: bootstrap automático (sin bloquear el arranque)
+      if (cfg.autoBootstrap) {
+        const doCheckAuth = cfg.autoBootstrapDoCheckAuth ?? true;
+        void guard.bootstrapAuthOnce({ doCheckAuth }).catch(() => {});
+      }
+
       return;
     }),
   ]);

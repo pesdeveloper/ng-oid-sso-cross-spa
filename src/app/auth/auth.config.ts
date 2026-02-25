@@ -15,7 +15,7 @@ export const authConfig: PassedInitialConfig = {
 
             responseType: 'code',
             startCheckSession: false,
-            silentRenew: true,
+            silentRenew: false,
             useRefreshToken: true,
             ignoreNonceAfterRefresh: true,
             historyCleanupOff: false,

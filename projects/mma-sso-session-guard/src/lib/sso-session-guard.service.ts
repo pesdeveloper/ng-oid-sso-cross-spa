@@ -1,30 +1,5 @@
 // sso-session-guard.service.ts
-//
-// Guard “plug-and-play” para SPAs Angular que usan angular-auth-oidc-client.
-// Objetivo:
-// - Revalidar si existe sesión REAL en el IdP (cookie) cuando la SPA “vuelve” (BFCache/backbutton, alt-tab, focus, etc.)
-// - Si la cookie IdP NO está => limpiar estado local (logoffLocal) para evitar “falsos autenticados”.
-// - Opcional “modo Office365”: si no hay sesión en IdP, disparar login interactivo 1 vez por pestaña.
-// - Opcional: si HAY cookie IdP pero NO hay auth local, intentar recuperar con prompt=none (una sola vez por pestaña).
-//
-// NOTAS IMPORTANTES
-// - No usa LoggerService (no exportable). En su lugar, intenta leer logLevel desde getConfiguration().
-// - NO llama checkAuth automáticamente salvo que vos lo pidas (para no interferir con tu App.ts), salvo
-//   en isLocallyAuthenticated() que es explícito (ver opts.onlyWhenAuthenticated).
-// - Throttle + inFlight para evitar spam.
-//
-// Requisitos:
-// - En el IdP debe existir GET {authority}/api/session/ping que devuelva:
-//     200 => hay sesión (cookie válida)
-//     401 => no hay sesión
-// - CORS del IdP debe permitir credentials desde tus SPAs.
-//
-// Integración recomendada:
-// - Usar provideSsoSessionGuard(...) (providers) para auto-start.
-// - O manual: inyectás SsoSessionGuardService y llamás start(opts) en App.ngOnInit().
-
 import { Injectable } from '@angular/core';
-import { Router } from '@angular/router';
 import { OidcSecurityService } from 'angular-auth-oidc-client';
 import { Observable, firstValueFrom } from 'rxjs';
 import { take } from 'rxjs/operators';
@@ -44,7 +19,7 @@ export enum SimpleLogLevel {
 
 /**
  * Modo de recuperación cuando:
- * - Hay cookie en IdP (ping OK)
+ * - Hay cookie en IdP (ping OK o inconcluso)
  * - Pero checkAuth/isAuthenticated local da false
  */
 export type RecoverMode = 'none' | 'promptNone' | 'interactive';
@@ -56,11 +31,7 @@ export interface SsoSessionGuardOptions {
   /** OidcSecurityService (inyectado en tu app) */
   oidc: OidcSecurityService;
 
-  /**
-   * Obtiene el authority actual desde config OIDC (recomendado).
-   * Ejemplo:
-   *   authority$: () => oidc.getConfiguration().pipe(take(1), map(c => (c as any).authority))
-   */
+  /** Obtiene el authority actual desde config OIDC */
   authority$: () => Observable<string>;
 
   /** Path del ping en el IdP (default: '/api/session/ping') */
@@ -75,73 +46,34 @@ export interface SsoSessionGuardOptions {
   /** Solo ping si la SPA cree que está autenticada (default: false) */
   onlyWhenAuthenticated?: boolean;
 
-  /**
-   * Office365-like:
-   * Si NO hay sesión IdP => authorize() interactivo 1 vez por pestaña.
-   * (default: false)
-   */
+  /** Office365-like: si NO hay sesión IdP => authorize() interactivo 1 vez por pestaña. (default false) */
   forceLoginIfNoIdpSession?: boolean;
 
-  /**
-   * Si HAY cookie IdP pero no hay auth local => recuperar:
-   * - 'promptNone' (default)
-   * - 'interactive'
-   * - 'none'
-   */
+  /** Recuperación si hay cookie IdP pero no auth local (default 'promptNone') */
   recoverMode?: RecoverMode;
 
-  /**
-   * Eventos que disparan revalidación.
-   * Default: ['pageshow','visibilitychange','focus']
-   */
+  /** Eventos que disparan revalidación. Default: ['pageshow','visibilitychange','focus'] */
   events?: Array<'pageshow' | 'focus' | 'visibilitychange'>;
 
-  /** Prefijo de logs (default: 'SSO') */
+  /** Prefijo de logs (default 'SSO') */
   logPrefix?: string;
 
-  /** Si no puedo leer cfg.logLevel, uso este (default: Debug) */
+  /** Si no puedo leer cfg.logLevel, uso este (default Debug) */
   defaultLogLevel?: SimpleLogLevel;
 
-  /**
-   * (Opcional) Antiforgery warm-up:
-   * Llama una URL (ej: {authority}/antiforgery/token) con credentials
-   * para que el IdP/Backend setee cookies/tokens necesarios.
-   * - Best effort: ignora errores
-   * - Se ejecuta una sola vez por instancia
-   */
+  /** Antiforgery warm-up (best effort) */
   antiforgery?: {
     enabled?: boolean;
-    /** default: '/antiforgery/token' */
-    path?: string;
-    /**
-     * default: 'beforePing'
-     * Nota: aunque exista este flag, el guard garantiza orden:
-     * si antiforgery.enabled => se ejecuta antes de cualquier ping en bootstrap/resume.
-     */
+    path?: string; // default '/antiforgery/token'
     run?: 'beforePing' | 'beforeRecover' | 'bootstrap';
-    /** Implementación concreta del loader (la arma el provider con HttpClient) */
     loader: (url: string) => Promise<void>;
   };
-
-  /**
-   * Lista blanca de prefijos de rutas permitidas para returnUrl.
-   * Si no se define => se permite cualquier ruta (comportamiento actual).
-   *
-   * Ej:
-   * ['/datos', '/clientes']
-   */
-  allowedReturnUrlPrefixes?: string[];  
 }
-
-// -----------------------------
-// Service
-// -----------------------------
 
 @Injectable({ providedIn: 'root' })
 export class SsoSessionGuardService {
   private started = false;
 
-  // Estado interno
   private opts!: Required<
     Pick<
       SsoSessionGuardOptions,
@@ -175,20 +107,12 @@ export class SsoSessionGuardService {
   private antiforgeryDone = false;
   private antiforgeryInFlight = false;
 
-  private isResuming = false; // mutex simple
+  private isResuming = false;
 
-  private returnUrlKey = '';
-  private returnUrlPendingKey = '';
-
-  /**
-   * Inicia el guard y engancha hooks.
-   * Llamar 1 vez.
-   */
   start(options: SsoSessionGuardOptions): void {
     if (this.started) return;
     this.started = true;
 
-    // Defaults
     const pingPath = options.pingPath ?? '/api/session/ping';
     const cacheBuster = options.cacheBuster ?? true;
     const minIntervalMs = options.minIntervalMs ?? 5000;
@@ -217,68 +141,53 @@ export class SsoSessionGuardService {
     this.interactiveOnceKey = `${this.opts.appNs}:oidc:interactive:once`;
     this.logoutDisabledKey = `${this.opts.appNs}:oidc:recover:disabled`;
 
-    this.returnUrlKey = `${this.opts.appNs}:oidc:returnUrl`;
-    this.returnUrlPendingKey = `${this.opts.appNs}:oidc:returnUrl:pending`;
-
     this.logDebug(
-      `antiforgery enabled=${!!this.opts.antiforgery?.enabled} run=${
-        this.opts.antiforgery?.run ?? 'beforePing'
-      } path=${this.opts.antiforgery?.path ?? ''}`
+      `antiforgery enabled=${!!this.opts.antiforgery?.enabled} run=${this.opts.antiforgery?.run ?? 'beforePing'} path=${this.opts.antiforgery?.path ?? ''}`
     );
 
     this.attachHooks();
   }
 
   /**
-   * Opcional:
-   * Hace 1 bootstrap: (antiforgery) -> ping IdP y luego:
-   * - si no hay cookie => logoffLocal() y opcional login interactivo (office365)
-   * - si hay cookie => no hace checkAuth automáticamente (por defecto)
-   *
-   * Si VOS querés enlazarlo con checkAuth, llamá esto en tu App.ts.
+   * ✅ Verificación inicial "de verdad" al entrar a la app.
+   * - antiforgery (si enabled) -> ping -> si no IdP => logoffLocal
+   * - si doCheckAuth: checkAuth y, si hay cookie IdP pero no auth local => recover según recoverMode
    */
-  async bootstrapAuthOnce(params?: { doCheckAuth?: boolean; router?: Router }): Promise<void> {
+  async bootstrapAuthOnce(params?: { doCheckAuth?: boolean }): Promise<void> {
     const doCheckAuth = params?.doCheckAuth ?? false;
 
-    // ✅ GARANTÍA: si antiforgery.enabled => SIEMPRE antes del ping en bootstrap
     if (this.opts.antiforgery?.enabled) {
       await this.ensureAntiforgeryOnce('bootstrap');
     }
 
     const ping = await this.safePing('bootstrap');
+    this.logDebug(`bootstrap: ping=${ping} (true=hasIdp, false=noIdp, null=unknown)`);
 
     if (ping === false) {
       await this.handleNoIdpSession('bootstrap');
       return;
     }
 
-    if (doCheckAuth) {
-      const resp = await firstValueFrom(this.opts.oidc.checkAuth().pipe(take(1)));
-      this.logDebug(`bootstrap: checkAuth isAuthenticated=${resp?.isAuthenticated}`);
+    if (!doCheckAuth) return;
 
-      // ✅ CLAVE: si venís del callback, deferir restore para que NO lo pise el oidc-client
-      if (resp?.isAuthenticated && params?.router) {
-        const router = params?.router;
-        setTimeout(() => this.tryRestoreAfterLogin(router), 0);
-      }      
+    const resp = await firstValueFrom(this.opts.oidc.checkAuth().pipe(take(1)));
+    this.logDebug(`bootstrap: checkAuth isAuthenticated=${resp?.isAuthenticated}`);
 
-      if (!resp?.isAuthenticated) {
-        // ✅ ping es true | null acá, ambos habilitan recover
-        await this.handleHasIdpButNoLocalAuth('bootstrap');
-      }
+    if (!resp?.isAuthenticated) {
+      await this.handleHasIdpButNoLocalAuth('bootstrap');
+    } else {
+      // si autenticó, habilitar futuros recover
+      this.clearPromptNoneOnce();
+      this.clearInteractiveOnce();
+      this.clearLogoutDisabled();
     }
   }
 
-  /**
-   * Llamalo cuando el usuario hace logout desde ESTA app (botón logout).
-   */
+  /** Llamalo cuando el usuario hace logout desde ESTA app */
   markLogoutFromThisApp(): void {
     this.setLogoutDisabled();
     this.clearPromptNoneOnce();
     this.clearInteractiveOnce();
-
-    // ✅ limpieza de deep-link pendiente
-    this.clearReturnUrlPending();    
   }
 
   clearLogoutDisabledFlag(): void {
@@ -286,7 +195,7 @@ export class SsoSessionGuardService {
   }
 
   // -----------------------------
-  // Hooks (resume / BFCache)
+  // Hooks
   // -----------------------------
 
   private attachHooks(): void {
@@ -296,10 +205,10 @@ export class SsoSessionGuardService {
     const { events } = this.opts;
 
     if (events.includes('pageshow')) {
-     const fn = (ev: PageTransitionEvent) => {
+      const fn = (ev: PageTransitionEvent) => {
         const persisted = (ev as any)?.persisted === true;
 
-        // ✅ solo BFCache/back-forward (persisted=true)
+        // BFCache/back-forward
         if (!persisted) {
           this.logDebug(`pageshow ignored (persisted=false)`);
           return;
@@ -331,48 +240,33 @@ export class SsoSessionGuardService {
     this.logDebug(`hooks attached: ${events.join(', ')}`);
   }
 
-  // -----------------------------
-  // Lógica principal
-  // -----------------------------
-
   private isOidcCallbackUrl(url: string): boolean {
-    // Detecta callback típico OIDC:
-    // - success: ?code=...&state=...
-    // - error:   ?error=...&state=...
-    // - extras: iss, session_state
     try {
       const u = new URL(url, window.location.origin);
       const p = u.searchParams;
-
       return p.has('code') || p.has('state') || p.has('error') || p.has('iss') || p.has('session_state');
     } catch {
       return /[?&](code|state|error|iss|session_state)=/i.test(url);
     }
   }
 
-  /**
-   * “Resume”: llamado por hooks.
-   * Orden garantizado cuando hay ping:
-   *   antiforgery (si enabled) -> ping
-   */
   private async onResume(reason: string): Promise<void> {
     if (!this.started) return;
 
     const url = window.location.href;
 
-    // 1) callback => NO tocar nada
+    // callback => no tocar nada
     if (this.isOidcCallbackUrl(url)) {
       this.logDebug(`onResume(${reason}) ignored: OIDC callback URL`);
       return;
     }
 
-    // 2) logout desde esta app => NO tocar nada
+    // logout desde esta app => no recuperar
     if (this.isLogoutDisabled()) {
       this.logDebug(`resume ignored (logoutDisabled=true). reason=${reason}`);
       return;
     }
 
-    // 3) mutex
     if (this.isResuming) {
       this.logDebug(`onResume(${reason}) ignored: already running`);
       return;
@@ -380,7 +274,7 @@ export class SsoSessionGuardService {
 
     this.isResuming = true;
     try {
-      // 4) onlyWhenAuthenticated (soft): si no hay token local, no ping
+      // onlyWhenAuthenticated: si no hay accessToken local, no ping
       if (this.opts.onlyWhenAuthenticated) {
         let token = '';
         try {
@@ -394,14 +288,14 @@ export class SsoSessionGuardService {
         }
       }
 
-      // 5) throttle (antes de hacer requests)
+      // throttle
       const now = Date.now();
       if (now - this.lastPingAt < this.opts.minIntervalMs) {
         this.logDebug(`resume throttled (${now - this.lastPingAt}ms < ${this.opts.minIntervalMs}ms). reason=${reason}`);
         return;
       }
 
-      // 6) in-flight
+      // in-flight
       if (this.pingInFlight) {
         this.logDebug(`resume ignored (pingInFlight=true). reason=${reason}`);
         return;
@@ -411,7 +305,6 @@ export class SsoSessionGuardService {
       this.pingInFlight = true;
 
       try {
-        // ✅ GARANTÍA: si antiforgery.enabled => SIEMPRE antes del ping en resume
         if (this.opts.antiforgery?.enabled) {
           await this.ensureAntiforgeryOnce(`resume:${reason}`);
         }
@@ -425,14 +318,12 @@ export class SsoSessionGuardService {
           return;
         }
 
-        // local auth roto?
         const isLocalAuth = await this.isLocallyAuthenticated();
         this.logDebug(`resume local isAuthenticated=${isLocalAuth}`);
 
         if (!isLocalAuth) {
           await this.handleHasIdpButNoLocalAuth(`resume:${reason}`);
         } else {
-          // Si se autenticó, limpiá flags para permitir futuros recover
           this.clearPromptNoneOnce();
           this.clearInteractiveOnce();
           this.clearLogoutDisabled();
@@ -445,10 +336,6 @@ export class SsoSessionGuardService {
     } finally {
       this.isResuming = false;
     }
-  }
-
-  clearPromptNoneOnceFlag(): void {
-    this.clearPromptNoneOnce();
   }
 
   private async isLocallyAuthenticated(): Promise<boolean> {
@@ -468,7 +355,7 @@ export class SsoSessionGuardService {
       this.logWarn(`logoffLocal failed (ignored). ctx=${context}`, e);
     }
 
-    // refrescar estado (BFCache)
+    // refresh state (best effort)
     try {
       const resp = await firstValueFrom(this.opts.oidc.checkAuth().pipe(take(1)));
       this.logDebug(`after logoffLocal: checkAuth isAuthenticated=${resp?.isAuthenticated} ctx=${context}`);
@@ -481,7 +368,6 @@ export class SsoSessionGuardService {
       this.logDebug(`office365-like: forceLoginIfNoIdpSession=true canInteractive=${can} ctx=${context}`);
       if (can) {
         try {
-          this.saveReturnUrlOnce();
           this.opts.oidc.authorize();
         } catch (e) {
           this.logError(`authorize() failed. ctx=${context}`, e);
@@ -503,13 +389,11 @@ export class SsoSessionGuardService {
       this.logDebug(`recoverMode=promptNone canTry=${can} ctx=${context}`);
       if (!can) return;
 
-      // Si querés específicamente antes de recover (por si no hubo resume/bootstrap previo)
       if (this.opts.antiforgery?.enabled && (this.opts.antiforgery.run ?? 'beforePing') === 'beforeRecover') {
         await this.ensureAntiforgeryOnce(`recover:${context}`);
       }
 
       try {
-        this.saveReturnUrlOnce();
         this.opts.oidc.authorize(undefined, { customParams: { prompt: 'none' } });
       } catch (e) {
         this.logError(`authorize(prompt=none) failed. ctx=${context}`, e);
@@ -523,7 +407,6 @@ export class SsoSessionGuardService {
       if (!can) return;
 
       try {
-        this.saveReturnUrlOnce();
         this.opts.oidc.authorize();
       } catch (e) {
         this.logError(`authorize() failed. ctx=${context}`, e);
@@ -531,6 +414,10 @@ export class SsoSessionGuardService {
       return;
     }
   }
+
+  // -----------------------------
+  // Antiforgery
+  // -----------------------------
 
   private buildUrlFromAuthority(authority: string, path: string): string {
     const base = (authority ?? '').replace(/\/+$/, '');
@@ -555,29 +442,26 @@ export class SsoSessionGuardService {
       this.logDebug(`antiforgery warm-up -> GET ${url} ctx=${context}`);
       await af.loader(url);
     } catch (e) {
-      // best effort
       this.logWarn(`antiforgery warm-up failed (ignored). ctx=${context}`, e);
     } finally {
-      // ✅ importante: aunque falle, no spamear
       this.antiforgeryDone = true;
       this.antiforgeryInFlight = false;
     }
   }
 
   // -----------------------------
-  // Ping (IdP cookie)
+  // Ping
   // -----------------------------
 
-  private async safePing(context: string): Promise<boolean|null> {
+  private async safePing(context: string): Promise<boolean | null> {
     try {
       const authority = await this.getAuthorityOnce();
       if (!authority) {
         this.logWarn(`safePing: missing authority. ctx=${context}`);
-        return true; // no rompas UX
+        return true; // best-effort
       }
 
-      // ✅ Safari + cross-site: NO usar ping por fetch (ITP puede bloquear cookies)
-      // Devolvemos null = "inconcluso/no confiable"
+      // Safari cross-site: ping inconcluso (no romper UX)
       if (this.isSafari() && this.isCrossSite(authority)) {
         this.logWarn(`safePing: skipped on Safari (cross-site). ctx=${context}`);
         return null;
@@ -592,7 +476,6 @@ export class SsoSessionGuardService {
         cache: 'no-store',
       });
 
-      // Si el browser siguió un redirect, para nosotros es "no hay sesión"
       if (resp.redirected) return false;
 
       const finalUrl = (resp.url ?? '').toLowerCase();
@@ -631,7 +514,6 @@ export class SsoSessionGuardService {
   }
 
   private isSafari(): boolean {
-    // Evita confundir Chrome iOS (que también reporta Safari-ish).
     const ua = navigator.userAgent;
     const isApple = /Macintosh|iPhone|iPad|iPod/.test(ua);
     const isSafari = /Safari/.test(ua) && !/Chrome|CriOS|Edg|EdgiOS|OPR|FxiOS/.test(ua);
@@ -642,9 +524,6 @@ export class SsoSessionGuardService {
     try {
       const a = new URL(authority);
       const here = window.location;
-
-      // Mínimo viable: host distinto => potencialmente cross-site.
-      // (Para tu caso localhost vs sb-idp..., esto alcanza.)
       return a.host.toLowerCase() !== here.host.toLowerCase();
     } catch {
       return true;
@@ -652,7 +531,7 @@ export class SsoSessionGuardService {
   }
 
   // -----------------------------
-  // sessionStorage flags (anti-loop)
+  // Flags anti-loop
   // -----------------------------
 
   private canTryPromptNoneOnce(): boolean {
@@ -668,9 +547,7 @@ export class SsoSessionGuardService {
   private clearPromptNoneOnce(): void {
     try {
       sessionStorage.removeItem(this.promptNoneOnceKey);
-    } catch {
-      /* no-op */
-    }
+    } catch {}
   }
 
   private canTryInteractiveOnce(): boolean {
@@ -686,9 +563,7 @@ export class SsoSessionGuardService {
   private clearInteractiveOnce(): void {
     try {
       sessionStorage.removeItem(this.interactiveOnceKey);
-    } catch {
-      /* no-op */
-    }
+    } catch {}
   }
 
   private isLogoutDisabled(): boolean {
@@ -702,154 +577,13 @@ export class SsoSessionGuardService {
   private setLogoutDisabled(): void {
     try {
       sessionStorage.setItem(this.logoutDisabledKey, '1');
-    } catch {
-      /* no-op */
-    }
+    } catch {}
   }
 
   private clearLogoutDisabled(): void {
     try {
       sessionStorage.removeItem(this.logoutDisabledKey);
-    } catch {
-      /* no-op */
-    }
-  }
-
-  public rememberReturnUrl(): void {
-    this.saveReturnUrlOnce();
-  }
-
-  private saveReturnUrlOnce(): void {
-    try {
-      if (sessionStorage.getItem(this.returnUrlPendingKey) === '1') return;
-
-      const href = window.location.href;
-
-      console.log('[SSO] saveReturnUrlOnce()', {
-        href: window.location.href,
-        path: window.location.pathname,
-        pending: sessionStorage.getItem(this.returnUrlPendingKey),
-        canSessionStorage: (() => { try { sessionStorage.setItem('__t','1'); sessionStorage.removeItem('__t'); return true; } catch { return false; } })(),
-      });      
-
-      if (this.isOidcCallbackUrl(href)) return;
-      if (window.location.pathname.startsWith('/logout')) return;
-
-      const u = new URL(href, window.location.origin);
-      const path = u.pathname;
-      const target = u.pathname + u.search + u.hash; // 👈 no depende del origin
-
-      if (path === '/') return;
-      
-      // ✅ VALIDACIÓN DE SEGURIDAD
-      if (!this.isAllowedReturnPath(path)) {
-        this.logWarn(`returnUrl rejected (not allowed): ${path}`);
-        return;
-      }
-
-      sessionStorage.setItem(this.returnUrlKey, target);
-      sessionStorage.setItem(this.returnUrlPendingKey, '1');
-
-
-      this.logDebug(`returnUrl saved: ${target}`);
-    } catch {
-      /* no-op */
-    }
-  }
-
-  private clearReturnUrlPending(): void {
-    try {
-      sessionStorage.removeItem(this.returnUrlPendingKey);
-      sessionStorage.removeItem(this.returnUrlKey);
-    } catch {
-      /* no-op */
-    }
-  }
-
-  private consumeReturnUrl(): string | null {
-    try {
-      const pending = sessionStorage.getItem(this.returnUrlPendingKey);
-      const stored = sessionStorage.getItem(this.returnUrlKey);
-
-      console.log('[SSO] consumeReturnUrl()', {
-        pending,
-        stored,
-      });
-
-      // ✅ Consumir si HAY returnUrlKey, aunque pending falte (más robusto en Safari/Mac)
-      const target = stored || '';
-
-      // ✅ limpieza one-shot SIEMPRE (anti-loop)
-      sessionStorage.removeItem(this.returnUrlPendingKey);
-      sessionStorage.removeItem(this.returnUrlKey);
-
-      return target || null;
-    } catch {
-      return null;
-    }
-  }
-
-  public tryRestoreAfterLogin(router: Router, opts?: { replaceUrl?: boolean }): void {
-    try {
-      const saved = this.consumeReturnUrl();
-
-      console.log(`>>>> tryRestoreAfterLogin saved = ${saved}`);
-      if (!saved) return;
-
-      // ✅ Acepta:
-      // - target relativo: "/clientes/123?x=1#sec"
-      // - href absoluto:   "https://localhost:4205/clientes/123?x=1#sec"
-      let target = '';
-      try {
-        // Si es absoluto, lo normalizamos a path+search+hash
-        const u = new URL(saved);
-        target = u.pathname + u.search + u.hash;
-      } catch {
-        // Si es relativo, lo usamos tal cual (pero normalizamos con origin)
-        const u = new URL(saved, window.location.origin);
-        target = u.pathname + u.search + u.hash;
-      }
-
-      const pathOnly = target.split('?')[0].split('#')[0];
-
-      // ✅ guard mínimo: jamás restaurar a rutas internas de auth/logout
-      if (
-        pathOnly.startsWith('/auth/callback') ||
-        pathOnly.startsWith('/auth/restore') ||
-        pathOnly.startsWith('/auth/unauthorized') ||
-        pathOnly.startsWith('/logout')
-      ) {
-        this.logDebug(`restore ignored (auth route): ${pathOnly}`);
-        return;
-      }
-
-      const current =
-        window.location.pathname +
-        window.location.search +
-        window.location.hash;
-
-      if (current === target) return;
-
-      this.logDebug(`restore -> ${target}`);
-      console.log(
-        `>>> tryRestoreAfterLogin navigateByUrl -> ${target} replaceUrl=${opts?.replaceUrl ?? true}`
-      );
-
-      void router.navigateByUrl(target, { replaceUrl: opts?.replaceUrl ?? true });
-    } catch (e) {
-      this.logWarn(`restore failed (ignored).`, e);
-    }
-  }
-
-  private isAllowedReturnPath(pathname: string): boolean {
-    const list = this.opts.allowedReturnUrlPrefixes;
-
-    // Si no hay whitelist → comportamiento actual (permitir todo)
-    if (!list || list.length === 0) return true;
-
-    return list.some(prefix =>
-      pathname === prefix || pathname.startsWith(prefix + '/')
-    );
+    } catch {}
   }
 
   // -----------------------------

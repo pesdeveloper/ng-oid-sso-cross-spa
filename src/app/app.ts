@@ -50,29 +50,10 @@ export class App implements OnInit, OnDestroy {
   private subs: Subscription[] = [];
 
   ngOnInit(): void {
-    // 1) bootstrap del facade
+    // 1) bootstrap del facade (esto DEBE disparar verificación de sesión)
     this.auth.bootstrap();
 
-    // 2) hooks opcionales
-    this.subs.push(
-      this.auth.onLogin$.subscribe(() => {
-        console.log('✅ login completado (state=true)');
-      })
-    );
-
-    this.subs.push(
-      this.auth.onLogout$.subscribe(() => {
-        console.log('✅ logout completado (state=false)');
-      })
-    );
-
-    this.subs.push(
-      this.auth.onLogoutRequested$.subscribe(() => {
-        console.log('🟡 logout iniciado (siempre se ejecuta)');
-      })
-    );
-
-    // 3) state
+    // 2) state (TODO sale de acá)
     this.subs.push(
       this.auth.state$.subscribe((s: AuthSessionState) => {
         this.isAuthenticated.set(!!s.isAuthenticated);
@@ -81,7 +62,6 @@ export class App implements OnInit, OnDestroy {
           this.config.set(s.config);
           this.clientLabel.set(this.computeClientLabelFromState(s));
         } else {
-          // por si arranca sin config aún
           this.clientLabel.set('...');
         }
 
@@ -130,6 +110,10 @@ export class App implements OnInit, OnDestroy {
 
   goToMasPagos(): void {
     window.location.href = environment.externalSites.masPagos;
+  }
+
+  goToBod(): void {
+    window.location.href = environment.externalSites.externalBod;
   }
 
   async mostrarAccessToken(): Promise<void> {

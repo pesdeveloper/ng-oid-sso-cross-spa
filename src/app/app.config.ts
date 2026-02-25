@@ -26,25 +26,15 @@ export const appConfig: ApplicationConfig = {
     ), 
     provideSsoSessionGuard({
       appNs: 'bod',
-      pingPath: '/api/session/ping',
-      minIntervalMs: 5000,
-      //events: ['visibilitychange', 'focus'],
-      //events: ['pageshow', 'focus'],
-      events: ['pageshow'],
-      // Office365-like (opcional):
-      forceLoginIfNoIdpSession: false,
-      // Recover si hay cookie IdP pero auth local no:
-      recoverMode: 'promptNone',
-      onlyWhenAuthenticated: false,
       logPrefix: 'BOD-SSO',
-      defaultLogLevel: SimpleLogLevel.Debug,
-      antiforgery: {
-        enabled: true,
-        path: '/antiforgery/token',
-        run: 'beforePing', // o 'beforeRecover' o 'bootstrap' o 'beforePing'
-      },
-      allowedReturnUrlPrefixes: [ '/datos','/checkout-external' ],      
-    }),
+      events: ['pageshow'],
+      minIntervalMs: 5000,
+      onlyWhenAuthenticated: true,
+      recoverMode: 'promptNone',
+      pingPath: '/api/session/ping',
+      antiforgery: { enabled: true, path: '/antiforgery/token', run: 'beforePing' },
+      autoBootstrap: false, // ✅ así NO duplicás
+    })
   ]
 };
 

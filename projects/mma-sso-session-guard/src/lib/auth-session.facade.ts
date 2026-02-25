@@ -1,6 +1,5 @@
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { inject, Injectable, OnDestroy } from '@angular/core';
-import { Router } from '@angular/router';
 import { LoginResponse, OidcSecurityService, OpenIdConfiguration } from 'angular-auth-oidc-client';
 import { BehaviorSubject, Observable, Subject, Subscription, forkJoin, of, take } from 'rxjs';
 import { catchError, distinctUntilChanged, filter, map, pairwise, shareReplay, switchMap } from 'rxjs/operators';
@@ -26,7 +25,6 @@ const INITIAL_STATE: AuthSessionState = {
 export class AuthSessionFacade implements OnDestroy {
   private readonly oidc = inject(OidcSecurityService);
   private readonly guard = inject(SsoSessionGuardService);
-  private readonly router = inject(Router);
   private readonly http = inject(HttpClient);
 
   private subs: Subscription[] = [];
@@ -35,6 +33,7 @@ export class AuthSessionFacade implements OnDestroy {
   private readonly _state$ = new BehaviorSubject<AuthSessionState>(INITIAL_STATE);
   readonly state$ = this._state$.asObservable();
 
+  // útiles, pero la app NO tiene por qué subscribirse
   readonly onLogin$ = this.state$.pipe(
     map(s => s.isAuthenticated),
     distinctUntilChanged(),
@@ -56,73 +55,39 @@ export class AuthSessionFacade implements OnDestroy {
   private readonly _logoutRequested$ = new Subject<void>();
   readonly onLogoutRequested$ = this._logoutRequested$.asObservable();
 
-  // -------------------------
-  // BOOTSTRAP
-  // -------------------------
-
   bootstrap(): void {
     if (this.started) return;
     this.started = true;
 
     const path = window.location.pathname || '';
 
-    // ✅ cargar config 1 vez al iniciar (aunque no haya sesión)
+    // config 1 vez
     this.oidc.getConfiguration().pipe(take(1)).subscribe(cfg => {
-      const cur = this._state$.value;
-      this._state$.next({
-        ...cur,
-        config: cfg as OpenIdConfiguration,
-      });
+      this.patchState({ config: cfg as OpenIdConfiguration });
     });
 
     // ruta /logout
     if (path.startsWith('/logout')) {
       this.guard.markLogoutFromThisApp();
       this.oidc.logoffLocal();
-      // dejar state consistente
-      this._state$.next({ ...this._state$.value, isAuthenticated: false });
+      this.resetAuthState();
       return;
     }
 
-    // escuchar cambios de auth del oidc
+    // escuchar cambios del oidc
     this.subs.push(
       this.oidc.isAuthenticated$.subscribe(({ isAuthenticated }) => {
-        if (isAuthenticated) {
-          this.guard.clearLogoutDisabledFlag();
-        }
+        if (isAuthenticated) this.guard.clearLogoutDisabledFlag();
 
-        // refrescar state base (auth + config)
-        this.oidc.getConfiguration().pipe(take(1)).subscribe(cfg => {
-          const cur = this._state$.value;
-          this._state$.next({
-            ...cur,
-            isAuthenticated,
-            config: cfg as OpenIdConfiguration,
-          });
+        this.patchState({ isAuthenticated });
 
-          // ✅ si autenticó, refrescar tokens/payloads en el state
-          if (isAuthenticated) {
-            this.refreshTokens();
-          } else {
-            // limpiar tokens/payloads/userinfo
-            this._state$.next({
-              ...this._state$.value,
-              accessToken: '',
-              accessPayload: null,
-              idToken: '',
-              idPayload: null,
-              userInfo: null,
-              userInfoLoadedAt: null,
-            });
-          }
-        });
+        if (isAuthenticated) this.refreshTokens();
+        else this.clearTokensAndUserInfo();
       })
     );
 
-    // bootstrap SSO
-    void this.guard
-      .bootstrapAuthOnce({ doCheckAuth: true, router: this.router })
-      .catch(() => {});
+    // ✅ CLAVE: verificación al entrar SIEMPRE
+    void this.guard.bootstrapAuthOnce({ doCheckAuth: true }).catch(() => {});
   }
 
   // -------------------------
@@ -130,27 +95,14 @@ export class AuthSessionFacade implements OnDestroy {
   // -------------------------
 
   login(): void {
-    this.guard.rememberReturnUrl();
     this.oidc.authorize();
   }
 
   logout(): void {
     this._logoutRequested$.next();
 
-    // ✅ forzar transición local inmediata para que onLogout$ dispare siempre
-    const cur = this._state$.value;
-    if (cur.isAuthenticated) {
-      this._state$.next({
-        ...cur,
-        isAuthenticated: false,
-        accessToken: '',
-        accessPayload: null,
-        idToken: '',
-        idPayload: null,
-        userInfo: null,
-        userInfoLoadedAt: null,
-      });
-    }
+    // transición local inmediata
+    this.resetAuthState();
 
     this.guard.markLogoutFromThisApp();
     this.oidc.logoff().subscribe();
@@ -159,7 +111,6 @@ export class AuthSessionFacade implements OnDestroy {
   refresh(): Observable<LoginResponse> {
     return this.oidc.forceRefreshSession().pipe(
       switchMap(r => {
-        // cuando refresca, actualizamos tokens/payloads en state
         this.refreshTokens();
         return of(r);
       })
@@ -170,8 +121,7 @@ export class AuthSessionFacade implements OnDestroy {
     this.oidc.getConfiguration().pipe(take(1)).subscribe(cfg => {
       const authority = (cfg as OpenIdConfiguration).authority;
       const clientId = (cfg as OpenIdConfiguration).clientId;
-      const currentUrl = window.location.origin + window.location.pathname;
-      const returnUrl = encodeURIComponent(currentUrl);
+      const returnUrl = encodeURIComponent(window.location.origin + window.location.pathname);
 
       window.location.href =
         `${authority}/account/profile?client_id=${clientId}&returnUrl=${returnUrl}`;
@@ -194,25 +144,21 @@ export class AuthSessionFacade implements OnDestroy {
       itp: this.oidc.getPayloadFromIdToken().pipe(take(1)),
     }).subscribe({
       next: ({ at, atp, it, itp }) => {
-        const cur = this._state$.value;
-        this._state$.next({
-          ...cur,
+        this.patchState({
           accessToken: at ?? '',
           accessPayload: atp ?? null,
           idToken: it ?? '',
           idPayload: itp ?? null,
         });
       },
-      error: _ => {
-        // no matamos el flujo si falla algo de payload
-      }
+      error: _ => {}
     });
   }
 
   refreshUserInfo(): void {
     const cur = this._state$.value;
     if (!cur.isAuthenticated || !cur.config?.authority) {
-      this._state$.next({ ...cur, userInfo: null, userInfoLoadedAt: null });
+      this.patchState({ userInfo: null, userInfoLoadedAt: null });
       return;
     }
 
@@ -227,34 +173,63 @@ export class AuthSessionFacade implements OnDestroy {
 
           const headers = new HttpHeaders({ Authorization: `Bearer ${token}` });
           return this.http.get(`${authority}/connect/userinfo`, { headers }).pipe(
-            catchError(err => of({
-              error: err?.message ?? 'UserInfo error',
-              status: err?.status,
-            }))
+            catchError(err =>
+              of({
+                error: err?.message ?? 'UserInfo error',
+                status: err?.status,
+              })
+            )
           );
         })
       )
       .subscribe(data => {
-        const now = new Date();
-        const cur2 = this._state$.value;
-        this._state$.next({
-          ...cur2,
+        this.patchState({
           userInfo: data ?? null,
-          userInfoLoadedAt: now,
+          userInfoLoadedAt: new Date(),
         });
       });
   }
 
   clearUserInfo(): void {
-    const cur = this._state$.value;
-    this._state$.next({ ...cur, userInfo: null, userInfoLoadedAt: null });
+    this.patchState({ userInfo: null, userInfoLoadedAt: null });
   }
 
   // -------------------------
-  // CLEANUP
+  // HELPERS
   // -------------------------
+
+  private patchState(p: Partial<AuthSessionState>): void {
+    const cur = this._state$.value;
+    this._state$.next({ ...cur, ...p });
+  }
+
+  private clearTokensAndUserInfo(): void {
+    this.patchState({
+      accessToken: '',
+      accessPayload: null,
+      idToken: '',
+      idPayload: null,
+      userInfo: null,
+      userInfoLoadedAt: null,
+    });
+  }
+
+  private resetAuthState(): void {
+    const cur = this._state$.value;
+    this._state$.next({
+      ...cur,
+      isAuthenticated: false,
+      accessToken: '',
+      accessPayload: null,
+      idToken: '',
+      idPayload: null,
+      userInfo: null,
+      userInfoLoadedAt: null,
+    });
+  }
 
   ngOnDestroy(): void {
     this.subs.forEach(s => s.unsubscribe());
+    this.subs = [];
   }
 }
