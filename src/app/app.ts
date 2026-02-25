@@ -6,12 +6,12 @@ import { MatDividerModule } from '@angular/material/divider';
 import { MatExpansionModule } from '@angular/material/expansion';
 import { MatIconModule } from '@angular/material/icon';
 import { MatToolbarModule } from '@angular/material/toolbar';
-import { RouterOutlet } from '@angular/router';
+import { Router, RouterOutlet } from '@angular/router';
 import { OpenIdConfiguration } from 'angular-auth-oidc-client';
 import { Subscription, firstValueFrom } from 'rxjs';
 import { environment } from '../environments/environment';
 
-import { AuthSessionFacade, AuthSessionState } from 'mma-sso-session-guard';
+import { AuthSessionFacade, AuthSessionState, SsoSessionGuardService } from 'mma-sso-session-guard';
 
 @Component({
   selector: 'app-root',
@@ -47,34 +47,32 @@ export class App implements OnInit, OnDestroy {
   refreshing = signal(false);
 
   private readonly auth = inject(AuthSessionFacade);
+  private readonly router = inject(Router);
+  private readonly ssoGuard = inject(SsoSessionGuardService);
   private subs: Subscription[] = [];
 
   ngOnInit(): void {
-    // 1) bootstrap del facade (esto DEBE disparar verificación de sesión)
-    this.auth.bootstrap();
-
-    // 2) state (TODO sale de acá)
+    // 2) state
     this.subs.push(
       this.auth.state$.subscribe((s: AuthSessionState) => {
         this.isAuthenticated.set(!!s.isAuthenticated);
-
         if (s.config) {
           this.config.set(s.config);
           this.clientLabel.set(this.computeClientLabelFromState(s));
         } else {
           this.clientLabel.set('...');
         }
-
         this.accessToken.set(s.accessToken ?? '');
         this.accessPayload.set(s.accessPayload ?? null);
-
         this.idToken.set(s.idToken ?? '');
         this.idPayload.set(s.idPayload ?? null);
-
         this.userInfo.set(s.userInfo ?? null);
         this.userInfoLoadedAt.set(s.userInfoLoadedAt ?? null);
       })
     );
+
+    // 3) ✅ bootstrap al final
+    void this.auth.bootstrapOnce().catch(() => {});
   }
 
   ngOnDestroy(): void {
@@ -123,19 +121,13 @@ export class App implements OnInit, OnDestroy {
   }
 
   loadUserInfo(): void {
-    // Opción A: el facade hace el fetch y actualiza state.userInfo
     this.auth.refreshUserInfo();
   }
 
   refreshUserInfo(): void {
-    // Ideal si existe en el facade (recomendado)
     if ((this.auth as any).clearUserInfo) {
       (this.auth as any).clearUserInfo();
-    } else {
-      // fallback: si no existe, al menos vuelve a pedir userinfo
-      // o podrías setear userInfo en null acá en App, pero eso rompe el patrón "solo state$"
     }
-
     this.auth.refreshUserInfo();
   }
 
@@ -166,13 +158,11 @@ export class App implements OnInit, OnDestroy {
   // --------------------------
 
   private computeClientLabelFromState(s: AuthSessionState): string {
-    // 1) si hay idPayload con nombre “humano”
     const idp: any = s.idPayload ?? null;
 
     if (idp?.client_name) return String(idp.client_name);
     if (idp?.azp) return String(idp.azp);
 
-    // 2) fallback: config.clientId (siempre debería estar)
     const cfg = s.config as any;
     const clientId = cfg?.clientId ?? cfg?.client_id ?? null;
 

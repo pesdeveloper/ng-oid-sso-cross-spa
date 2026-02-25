@@ -156,6 +156,9 @@ export class SsoSessionGuardService {
   async bootstrapAuthOnce(params?: { doCheckAuth?: boolean }): Promise<void> {
     const doCheckAuth = params?.doCheckAuth ?? false;
 
+    // ✅ 0) Capturar deep-link ANTES de cualquier cosa (si aplica)
+    this.captureReturnUrlIfNeeded('bootstrap');
+
     if (this.opts.antiforgery?.enabled) {
       await this.ensureAntiforgeryOnce('bootstrap');
     }
@@ -176,7 +179,6 @@ export class SsoSessionGuardService {
     if (!resp?.isAuthenticated) {
       await this.handleHasIdpButNoLocalAuth('bootstrap');
     } else {
-      // si autenticó, habilitar futuros recover
       this.clearPromptNoneOnce();
       this.clearInteractiveOnce();
       this.clearLogoutDisabled();
@@ -192,6 +194,43 @@ export class SsoSessionGuardService {
 
   clearLogoutDisabledFlag(): void {
     this.clearLogoutDisabled();
+  }
+
+  getReturnUrlKey(): string {
+    const url = `${this.opts.appNs}:returnUrl`;
+    this.logDebug(`>>>> getReturnUrlKey : GET url = '${url}'`);
+    return url;
+  }
+
+  setReturnUrl(url: string, opts?: { overwrite?: boolean }): void {
+    const key = this.getReturnUrlKey();
+    const overwrite = opts?.overwrite ?? false;
+
+    try {
+      if (!overwrite) {
+        const existing = sessionStorage.getItem(key);
+        if (existing) {
+          this.logDebug(`setReturnUrl ignored (already set). existing='${existing}' new='${url}'`);
+          return;
+        }
+      }
+
+      sessionStorage.setItem(key, url);
+      this.logDebug(`setReturnUrl stored '${url}' overwrite=${overwrite}`);
+    } catch {}
+  }
+
+  popReturnUrl(): string | null {
+    try {
+      const k = this.getReturnUrlKey();
+      const v = sessionStorage.getItem(k);
+      if (v) sessionStorage.removeItem(k);
+      this.logDebug(`>>>> popReturnUrl : k = '${k}' , v = '${v}'`);      
+      return v;
+    } catch {
+      this.logDebug(`>>>> popReturnUrl CATCH-ERROR`);      
+      return null;
+    }
   }
 
   // -----------------------------
@@ -368,6 +407,7 @@ export class SsoSessionGuardService {
       this.logDebug(`office365-like: forceLoginIfNoIdpSession=true canInteractive=${can} ctx=${context}`);
       if (can) {
         try {
+          this.captureReturnUrlIfNeeded(`forceLogin:${context}`);
           this.opts.oidc.authorize();
         } catch (e) {
           this.logError(`authorize() failed. ctx=${context}`, e);
@@ -394,6 +434,7 @@ export class SsoSessionGuardService {
       }
 
       try {
+        this.captureReturnUrlIfNeeded(`recover:promptNone:${context}`);
         this.opts.oidc.authorize(undefined, { customParams: { prompt: 'none' } });
       } catch (e) {
         this.logError(`authorize(prompt=none) failed. ctx=${context}`, e);
@@ -407,6 +448,7 @@ export class SsoSessionGuardService {
       if (!can) return;
 
       try {
+        this.captureReturnUrlIfNeeded(`recover:interactive:${context}`);
         this.opts.oidc.authorize();
       } catch (e) {
         this.logError(`authorize() failed. ctx=${context}`, e);
@@ -527,6 +569,33 @@ export class SsoSessionGuardService {
       return a.host.toLowerCase() !== here.host.toLowerCase();
     } catch {
       return true;
+    }
+  }
+
+  private captureReturnUrlIfNeeded(context: string): void {
+    try {
+      const href = window.location.href;
+
+      this.logDebug(`>>> captureReturnUrl START: href=${href}`);
+
+      // 1️⃣ nunca capturar callback OIDC
+      if (this.isOidcCallbackUrl(href)) return;
+
+      // 2️⃣ obtener path real
+      const rel = window.location.pathname + window.location.search;
+
+      // 3️⃣ ignorar root
+      if (!rel || rel === '/' || rel.startsWith('/logout')) return;
+
+      // 4️⃣ primera gana (no pisar)
+      const key = this.getReturnUrlKey();
+      if (sessionStorage.getItem(key)) return;
+
+      sessionStorage.setItem(key, rel);
+      this.logDebug(`>>>> captureReturnUrl stored '${rel}'. ctx=${context}`);
+     
+    } catch (e) {
+      this.logWarn(`>>>> captureReturnUrl failed (ignored). ctx=${context}`, e);
     }
   }
 

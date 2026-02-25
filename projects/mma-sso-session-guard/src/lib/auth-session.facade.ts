@@ -1,8 +1,10 @@
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { inject, Injectable, OnDestroy } from '@angular/core';
 import { LoginResponse, OidcSecurityService, OpenIdConfiguration } from 'angular-auth-oidc-client';
-import { BehaviorSubject, Observable, Subject, Subscription, forkJoin, of, take } from 'rxjs';
+import { BehaviorSubject, Observable, Subject, Subscription, firstValueFrom, forkJoin, of, take } from 'rxjs';
 import { catchError, distinctUntilChanged, filter, map, pairwise, shareReplay, switchMap } from 'rxjs/operators';
+import { PublicEventsService, EventTypes } from 'angular-auth-oidc-client';
+import { Router } from '@angular/router';
 
 import { SsoSessionGuardService } from './sso-session-guard.service';
 import { AuthSessionState } from './auth-session.state';
@@ -27,11 +29,22 @@ export class AuthSessionFacade implements OnDestroy {
   private readonly guard = inject(SsoSessionGuardService);
   private readonly http = inject(HttpClient);
 
+  private readonly events = inject(PublicEventsService);
+  private readonly router = inject(Router);
+
+  private _bootstrapPromise: Promise<void> | null = null;
+  private _bootstrapped = false;
+
   private subs: Subscription[] = [];
   private started = false;
 
   private readonly _state$ = new BehaviorSubject<AuthSessionState>(INITIAL_STATE);
   readonly state$ = this._state$.asObservable();
+
+  private readonly _logoutRequested$ = new Subject<void>();
+  readonly onLogoutRequested$ = this._logoutRequested$.asObservable();
+
+  private _pendingReturnUrl: string | null = null;
 
   // útiles, pero la app NO tiene por qué subscribirse
   readonly onLogin$ = this.state$.pipe(
@@ -40,7 +53,7 @@ export class AuthSessionFacade implements OnDestroy {
     pairwise(),
     filter(([prev, curr]) => !prev && curr),
     map(() => void 0),
-    shareReplay({ bufferSize: 1, refCount: true })
+    shareReplay({ bufferSize: 1, refCount: false })
   );
 
   readonly onLogout$ = this.state$.pipe(
@@ -49,14 +62,20 @@ export class AuthSessionFacade implements OnDestroy {
     pairwise(),
     filter(([prev, curr]) => prev && !curr),
     map(() => void 0),
-    shareReplay({ bufferSize: 1, refCount: true })
+    shareReplay({ bufferSize: 1, refCount: false })
   );
 
-  private readonly _logoutRequested$ = new Subject<void>();
-  readonly onLogoutRequested$ = this._logoutRequested$.asObservable();
 
+
+  checkAuthOnce(): Promise<boolean> {
+    return firstValueFrom(this.oidc.checkAuth().pipe(take(1))).then(r => !!r.isAuthenticated).catch(() => false);
+  }
+  
   bootstrap(): void {
     if (this.started) return;
+
+    this.setupDeepLinkRestore();
+  
     this.started = true;
 
     const path = window.location.pathname || '';
@@ -81,20 +100,97 @@ export class AuthSessionFacade implements OnDestroy {
 
         this.patchState({ isAuthenticated });
 
-        if (isAuthenticated) this.refreshTokens();
-        else this.clearTokensAndUserInfo();
+        if (isAuthenticated) {
+          this.refreshTokens();
+          this.tryNavigatePendingReturnUrl(); // ✅ acá
+        } else {
+          this.clearTokensAndUserInfo();
+        }
       })
     );
-
-    // ✅ CLAVE: verificación al entrar SIEMPRE
-    void this.guard.bootstrapAuthOnce({ doCheckAuth: true }).catch(() => {});
+    
   }
 
+  bootstrapOnce(): Promise<void> {
+    if (this._bootstrapped) return Promise.resolve();
+
+    if (!this._bootstrapPromise) {
+      this._bootstrapPromise = Promise.resolve()
+        .then(() => {
+          this.bootstrap();
+
+          // /logout: no ping, ya cerramos local
+          if (window.location.pathname.startsWith('/logout')) return;
+
+          return this.guard.bootstrapAuthOnce({ doCheckAuth: true });
+        })
+        .then(() => {
+          // ✅ solo si todo salió bien
+          this._bootstrapped = true;
+        })
+        .catch(err => {
+          // ✅ permitir retry si falló
+          this._bootstrapPromise = null;
+          this._bootstrapped = false;
+          throw err;
+        });
+    }
+
+    return this._bootstrapPromise;
+  }
+
+
+  private setupDeepLinkRestore(): void {
+    this.subs.push(
+      this.events.registerForEvents().subscribe(e => {
+        if (!e) return;
+
+        if (e.type === EventTypes.NewAuthenticationResult) {
+          const url = this.guard.popReturnUrl(); // consume y borra
+          if (!url) return;
+
+          this._pendingReturnUrl = url;
+
+          // si YA está autenticado, navegá ahora
+          this.tryNavigatePendingReturnUrl();
+        }
+
+        if (e.type === EventTypes.CheckingAuthFinishedWithError) {
+          this.guard.popReturnUrl();
+          this._pendingReturnUrl = null;
+        }
+      })
+    );
+  }
+
+
+  private tryNavigatePendingReturnUrl(): void {
+    const url = this._pendingReturnUrl;
+    if (!url) return;
+
+    const isAuth = this._state$.value.isAuthenticated;
+    if (!isAuth) return;
+
+    this._pendingReturnUrl = null;
+
+    const current = window.location.pathname + window.location.search;
+    if (current === url) return;
+
+    queueMicrotask(() => {
+      this.router
+        .navigateByUrl(url, { replaceUrl: true })
+        .then(ok => console.log(`[AuthSessionFacade] deep-link navigate ok=${ok} url=${url}`))
+        .catch(err => console.error('[AuthSessionFacade] deep-link navigate error', err));
+    });
+  }  
   // -------------------------
   // ACTIONS
   // -------------------------
 
   login(): void {
+    // ✅ capturar deep-link ANTES de navegar al IdP
+    this.guard.setReturnUrl(window.location.pathname + window.location.search);
+
     this.oidc.authorize();
   }
 

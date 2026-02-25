@@ -34,7 +34,8 @@ export const appConfig: ApplicationConfig = {
       pingPath: '/api/session/ping',
       antiforgery: { enabled: true, path: '/antiforgery/token', run: 'beforePing' },
       autoBootstrap: false, // ✅ así NO duplicás
-    })
+    }),
+    
   ]
 };
 
