@@ -34,6 +34,12 @@ export const appConfig: ApplicationConfig = {
       pingPath: '/api/session/ping',
       antiforgery: { enabled: true, path: '/antiforgery/token', run: 'beforePing' },
       autoBootstrap: false, // ✅ así NO duplicás
+
+      // ✅ deep-links permitidos
+      allowedReturnUrlPrefixes: ['/datos', '/checkout'],
+
+      // ✅ opcional: extras a ignorar (si querés sumar)
+      //ignoredReturnUrlPrefixes: ['/logout', '/signin-oidc', '/auth/callback', '/callback', '/silent-renew', '/assets'],      
     }),
     
   ]

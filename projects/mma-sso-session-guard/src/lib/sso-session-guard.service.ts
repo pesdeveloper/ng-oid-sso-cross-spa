@@ -68,6 +68,13 @@ export interface SsoSessionGuardOptions {
     run?: 'beforePing' | 'beforeRecover' | 'bootstrap';
     loader: (url: string) => Promise<void>;
   };
+
+  /** ✅ Deep-links permitidos (prefijos). Ej: ['/datos','/checkout'] */
+  allowedReturnUrlPrefixes?: string[];
+
+  /** ✅ Paths a ignorar SIEMPRE (además de callbacks OIDC). Ej: ['/logout','/signin-oidc'] */
+  ignoredReturnUrlPrefixes?: string[];
+
 }
 
 @Injectable({ providedIn: 'root' })
@@ -89,6 +96,8 @@ export class SsoSessionGuardService {
       | 'events'
       | 'logPrefix'
       | 'defaultLogLevel'
+      | 'allowedReturnUrlPrefixes'
+      | 'ignoredReturnUrlPrefixes'
     >
   > &
     SsoSessionGuardOptions;
@@ -123,6 +132,14 @@ export class SsoSessionGuardService {
     const logPrefix = options.logPrefix ?? 'SSO';
     const defaultLogLevel = options.defaultLogLevel ?? SimpleLogLevel.Debug;
 
+    const allowedReturnUrlPrefixes = options.allowedReturnUrlPrefixes ?? [];
+    const ignoredReturnUrlPrefixes = options.ignoredReturnUrlPrefixes ?? [
+      '/logout',
+      '/silent-renew',
+      '/assets',
+    ];
+    
+    
     this.opts = {
       ...options,
       pingPath,
@@ -134,6 +151,8 @@ export class SsoSessionGuardService {
       events,
       logPrefix,
       defaultLogLevel,
+      allowedReturnUrlPrefixes,
+      ignoredReturnUrlPrefixes,      
     };
 
     // SessionStorage keys namespaced
@@ -575,25 +594,33 @@ export class SsoSessionGuardService {
   private captureReturnUrlIfNeeded(context: string): void {
     try {
       const href = window.location.href;
-
       this.logDebug(`>>> captureReturnUrl START: href=${href}`);
 
       // 1️⃣ nunca capturar callback OIDC
-      if (this.isOidcCallbackUrl(href)) return;
+      if (this.isOidcCallbackUrl(href)) {
+        this.logDebug(`captureReturnUrl ignored: OIDC callback. ctx=${context}`);
+        return;
+      }
 
-      // 2️⃣ obtener path real
-      const rel = window.location.pathname + window.location.search;
+      // 2️⃣ path + query
+      const pathname = window.location.pathname || '';
+      const rel = pathname + (window.location.search || '');
 
-      // 3️⃣ ignorar root
-      if (!rel || rel === '/' || rel.startsWith('/logout')) return;
+      // 3️⃣ aplicar filtro whitelist/ignore/assets sobre el PATH
+      if (!this.isReturnUrlAllowed(pathname)) {
+        this.logDebug(`captureReturnUrl ignored: not allowed pathname='${pathname}'. ctx=${context}`);
+        return;
+      }
 
-      // 4️⃣ primera gana (no pisar)
+      // 4️⃣ first-wins (no pisar)
       const key = this.getReturnUrlKey();
-      if (sessionStorage.getItem(key)) return;
+      if (sessionStorage.getItem(key)) {
+        this.logDebug(`captureReturnUrl ignored: already stored. ctx=${context}`);
+        return;
+      }
 
       sessionStorage.setItem(key, rel);
       this.logDebug(`>>>> captureReturnUrl stored '${rel}'. ctx=${context}`);
-     
     } catch (e) {
       this.logWarn(`>>>> captureReturnUrl failed (ignored). ctx=${context}`, e);
     }
@@ -653,6 +680,69 @@ export class SsoSessionGuardService {
     try {
       sessionStorage.removeItem(this.logoutDisabledKey);
     } catch {}
+  }
+
+  // --------------------------
+  // Helpers  Normlizacion urls
+  // --------------------------
+
+  private normalizePath(p: string): string {
+    if (!p) return '';
+    // asegura leading slash y saca trailing slashes (excepto '/')
+    let x = p.startsWith('/') ? p : '/' + p;
+    x = x.length > 1 ? x.replace(/\/+$/, '') : x;
+    return x;
+  }
+
+  private isPrefixMatch(pathname: string, prefix: string): boolean {
+    const p = this.normalizePath(pathname);
+    const pref = this.normalizePath(prefix);
+    return p === pref || p.startsWith(pref + '/');
+  }
+
+  private isAssetPath(pathname: string): boolean {
+    const p = (pathname ?? '').toLowerCase();
+
+    // /assets/... o /favicon.ico
+    if (p.startsWith('/assets/')) return true;
+    if (p === '/favicon.ico') return true;
+
+    // archivos estáticos típicos
+    return (
+      p.endsWith('.js') ||
+      p.endsWith('.css') ||
+      p.endsWith('.map') ||
+      p.endsWith('.ico') ||
+      p.endsWith('.png') ||
+      p.endsWith('.jpg') ||
+      p.endsWith('.jpeg') ||
+      p.endsWith('.webp') ||
+      p.endsWith('.svg') ||
+      p.endsWith('.woff') ||
+      p.endsWith('.woff2') ||
+      p.endsWith('.ttf')
+    );
+  }
+
+  private isReturnUrlAllowed(pathname: string): boolean {
+    const p = this.normalizePath(pathname);
+
+    // 0) root nunca
+    if (!p || p === '/') return false;
+
+    // 1) assets nunca
+    if (this.isAssetPath(p)) return false;
+
+    // 2) ignore list (técnicos)
+    const ignored = this.opts.ignoredReturnUrlPrefixes ?? [];
+    if (ignored.some(x => this.isPrefixMatch(p, x))) return false;
+
+    // 3) whitelist: si está vacía => NO capturar nada (seguro)
+    const allowed = this.opts.allowedReturnUrlPrefixes ?? [];
+    if (!allowed.length) return false;
+
+    // 4) debe matchear algún prefijo permitido
+    return allowed.some(x => this.isPrefixMatch(p, x));
   }
 
   // -----------------------------

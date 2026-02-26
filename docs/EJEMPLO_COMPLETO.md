@@ -161,13 +161,11 @@ permitiendo que el deep-link quede “en el navegador” mientras se dispara el 
 import { Routes } from '@angular/router';
 import { Home } from './pages/home/home';
 import { Logout } from './pages/logout/logout';
-import { Habilitaciones } from './pages/habilitaciones/habilitaciones';
 import { ShieldGuard } from './auth/guards';
 
 export const routes: Routes = [
   { path: '', component: Home },
   { path: 'logout', component: Logout },
-  { path: 'habilitaciones', component: Habilitaciones },
 
   {
     path: 'datos/:sujeto/:cuenta',

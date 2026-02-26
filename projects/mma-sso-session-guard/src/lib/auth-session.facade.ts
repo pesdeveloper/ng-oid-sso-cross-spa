@@ -1,10 +1,12 @@
 import { HttpClient, HttpHeaders } from '@angular/common/http';
-import { inject, Injectable, OnDestroy } from '@angular/core';
+import { inject, Injectable, OnDestroy, computed, signal } from '@angular/core';
 import { LoginResponse, OidcSecurityService, OpenIdConfiguration } from 'angular-auth-oidc-client';
 import { BehaviorSubject, Observable, Subject, Subscription, firstValueFrom, forkJoin, of, take } from 'rxjs';
 import { catchError, distinctUntilChanged, filter, map, pairwise, shareReplay, switchMap } from 'rxjs/operators';
 import { PublicEventsService, EventTypes } from 'angular-auth-oidc-client';
 import { Router } from '@angular/router';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { finalize } from 'rxjs/operators';
 
 import { SsoSessionGuardService } from './sso-session-guard.service';
 import { AuthSessionState } from './auth-session.state';
@@ -65,7 +67,29 @@ export class AuthSessionFacade implements OnDestroy {
     shareReplay({ bufferSize: 1, refCount: false })
   );
 
+  // ✅ state como signal (sincronizado con state$)
+  readonly state = toSignal(this.state$, { initialValue: INITIAL_STATE });
 
+  // ✅ selectores simples (signals)
+  readonly isAuthenticated = computed(() => !!this.state().isAuthenticated);
+  readonly config = computed(() => this.state().config);
+
+  readonly accessToken = computed(() => this.state().accessToken ?? '');
+  readonly accessPayload = computed(() => this.state().accessPayload ?? null);
+
+  readonly idToken = computed(() => this.state().idToken ?? '');
+  readonly idPayload = computed(() => this.state().idPayload ?? null);
+
+  readonly userInfo = computed(() => this.state().userInfo ?? null);
+  readonly userInfoLoadedAt = computed(() => this.state().userInfoLoadedAt ?? null);
+
+  // ✅ estado interno
+  private readonly _refreshing = signal(false);
+  // ✅ solo lectura para la UI
+  readonly refreshing = this._refreshing.asReadonly()
+
+  // ✅ clientLabel derivado (sin lógica en App)
+  readonly clientLabel = computed(() => this.computeClientLabelFromState(this.state()));  
 
   checkAuthOnce(): Promise<boolean> {
     return firstValueFrom(this.oidc.checkAuth().pipe(take(1))).then(r => !!r.isAuthenticated).catch(() => false);
@@ -183,6 +207,19 @@ export class AuthSessionFacade implements OnDestroy {
         .catch(err => console.error('[AuthSessionFacade] deep-link navigate error', err));
     });
   }  
+
+  private computeClientLabelFromState(s: AuthSessionState): string {
+    const idp: any = s.idPayload ?? null;
+
+    if (idp?.client_name) return String(idp.client_name);
+    if (idp?.azp) return String(idp.azp);
+
+    const cfg = s.config as any;
+    const clientId = cfg?.clientId ?? cfg?.client_id ?? null;
+
+    return clientId ? String(clientId) : 'No client id';
+  }
+
   // -------------------------
   // ACTIONS
   // -------------------------
@@ -205,11 +242,18 @@ export class AuthSessionFacade implements OnDestroy {
   }
 
   refresh(): Observable<LoginResponse> {
+    if (this._refreshing()) {
+      return of(null as any); // evita doble refresh
+    }
+
+    this._refreshing.set(true);
+
     return this.oidc.forceRefreshSession().pipe(
       switchMap(r => {
         this.refreshTokens();
         return of(r);
-      })
+      }),
+      finalize(() => this._refreshing.set(false))
     );
   }
 

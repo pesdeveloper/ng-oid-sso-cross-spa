@@ -1,11 +1,11 @@
 <mat-toolbar color="primary">
-  <span>{{ clientLabel() }}</span>
+  <span>{{ auth.clientLabel() }}</span>
 </mat-toolbar>
 
 <mat-divider></mat-divider>
 
 <div class="main-container">
-  @if (isAuthenticated(); as auth) {
+  @if (auth.isAuthenticated()) {
     <mat-card>
       <div style="display: flex; gap: 12px; flex-wrap: wrap;">
         <button mat-raised-button color="warn" (click)="logout()">
@@ -23,30 +23,60 @@
           Perfil de usuario
         </button>
 
-        <button
-          mat-raised-button
-          color="primary"
-          (click)="refreshSession()"
-          [disabled]="refreshing()"
-        >
-          <mat-icon fontSet="material-icons" [class.spin]="refreshing()">
+        <button mat-raised-button color="primary" (click)="refreshSession()" [disabled]="auth.refreshing()">
+          <mat-icon fontSet="material-icons" [class.spin]="auth.refreshing()">
             autorenew
           </mat-icon>
-          {{ refreshing() ? 'Refreshing…' : 'Refresh session' }}
+          {{ auth.refreshing() ? 'Refreshing…' : 'Refresh session' }}
         </button>
       </div>
 
-      <div style="margin-top: 12px; display: flex; gap: 12px; flex-wrap: wrap;">
-        <button mat-raised-button color="accent" (click)="goToMasPagos()">
-          <mat-icon fontSet="material-icons">payments</mat-icon>
-          Redireccion C/DeepLink + Guard
-        </button>
+      <mat-card appearance="outlined" style="margin-top: 24px; padding: 16px;">
+        <h3 style="margin-top: 0; margin-bottom: 16px;">Panel de pruebas de Redirección</h3>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px;">
+          
+          <div style="display: flex; flex-direction: column; align-items: flex-start; gap: 4px;">
+            <button mat-raised-button color="primary" (click)="goUrlConDeepLink()" style="width: 100%; height: 48px; font-size: 1.1em;">
+              <mat-icon fontSet="material-icons">check_circle</mat-icon>
+              URL con Deep Link Válido
+            </button>
+            <div style="font-size: 0.85em; color: #666; margin-left: 4px; word-break: break-all;">
+              <strong>Destino:</strong> {{urlConDeepLink}}
+            </div>
+          </div>
 
-        <button mat-raised-button color="Success" (click)="goToBod()">
-          <mat-icon fontSet="material-icons">link</mat-icon>
-          Redireccion S/DeepLink
-        </button>
-      </div>
+          <div style="display: flex; flex-direction: column; align-items: flex-start; gap: 4px;">
+            <button mat-raised-button (click)="goUrlConDeepLinkInvalido()" style="width: 100%; height: 48px; font-size: 1.1em; background-color: #fb8c00; color: white;">
+              <mat-icon fontSet="material-icons">error</mat-icon>
+              URL con Deep Link Inválido
+            </button>
+            <div style="font-size: 0.85em; color: #666; margin-left: 4px; word-break: break-all;">
+              <strong>Destino:</strong> {{urlConDeepLinkInvalido}}
+            </div>
+          </div>
+
+          <div style="display: flex; flex-direction: column; align-items: flex-start; gap: 4px;">
+            <button mat-raised-button color="accent" (click)="goUrlSinDeepLink()" style="width: 100%; height: 48px; font-size: 1.1em;">
+              <mat-icon fontSet="material-icons">link</mat-icon>
+              URL sin Deep Link
+            </button>
+            <div style="font-size: 0.85em; color: #666; margin-left: 4px; word-break: break-all;">
+              <strong>Destino:</strong> {{urlSinDeepLink}}
+            </div>
+          </div>
+
+          <div style="display: flex; flex-direction: column; align-items: flex-start; gap: 4px;">
+            <button mat-raised-button color="primary" (click)="goUrlSbMasPagosConDeepLink()" style="width: 100%; height: 48px; font-size: 1.1em;">
+              <mat-icon fontSet="material-icons">payments</mat-icon>
+              URL MasPagos con Deep Link
+            </button>
+            <div style="font-size: 0.85em; color: #666; margin-left: 4px; word-break: break-all;">
+              <strong>Destino:</strong> {{urlSbMasPagosConDeepLink}}
+            </div>
+          </div>
+
+        </div>
+      </mat-card>
 
       <br />
       <p>Is Authenticated:<strong> {{ auth }}</strong></p>
@@ -71,14 +101,14 @@
         Configuration loaded
       </mat-panel-title>
     </mat-expansion-panel-header>
-    <pre>{{ config() | json }}</pre>
+    <pre>{{ auth.config() | json }}</pre>
   </mat-expansion-panel>
 
   <br />
 
   <!-- Access Token -->
   <mat-expansion-panel class="panel-info">
-    @let atp = accessPayload();
+    @let atp = auth.accessPayload();
 
     <mat-expansion-panel-header>
       <mat-panel-title>
@@ -96,7 +126,7 @@
 
     @if (atp) {
       <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px;">
-        <button mat-stroked-button (click)="copy(accessToken())" [disabled]="!accessToken()">
+        <button mat-stroked-button (click)="copy(auth.accessToken())" [disabled]="!auth.accessToken()">
           <mat-icon fontSet="material-icons">content_copy</mat-icon>
           Copiar JWT
         </button>
@@ -118,7 +148,7 @@
 
   <!-- ID Token -->
   <mat-expansion-panel class="panel-info">
-    @let pid = idPayload();
+    @let pid = auth.idPayload();
 
     <mat-expansion-panel-header>
       <mat-panel-title>
@@ -136,7 +166,7 @@
 
     @if (pid) {
       <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px;">
-        <button mat-stroked-button (click)="copy(idToken())" [disabled]="!idToken()">
+        <button mat-stroked-button (click)="copy(auth.idToken())" [disabled]="!auth.idToken()">
           <mat-icon fontSet="material-icons">content_copy</mat-icon>
           Copiar JWT
         </button>
@@ -164,27 +194,27 @@
         UserInfo
       </mat-panel-title>
       <mat-panel-description>
-        @if (userInfo()) {
-          actualizado: {{ userInfoLoadedAt() | date:'mediumTime' }}
+        @if (auth.userInfo()) {
+          actualizado: {{ auth.userInfoLoadedAt() | date:'mediumTime' }}
         } @else {
           &nbsp;
         }
       </mat-panel-description>
     </mat-expansion-panel-header>
 
-    @if (userInfo()) {
+    @if (auth.userInfo()) {
       <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px;">
         <button mat-stroked-button (click)="refreshUserInfo()">
           <mat-icon fontSet="material-icons">refresh</mat-icon>
           Actualizar
         </button>
-        <button mat-stroked-button (click)="copyJson(userInfo())">
+        <button mat-stroked-button (click)="copyJson(auth.userInfo())">
           <mat-icon fontSet="material-icons">content_copy</mat-icon>
           Copiar JSON
         </button>
       </div>
 
-      <pre>{{ userInfo() | json }}</pre>
+      <pre>{{ auth.userInfo() | json }}</pre>
     } @else {
       <p style="opacity:.7">
         Abrí el panel (y logueate) para consultar /connect/userinfo.
