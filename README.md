@@ -1,78 +1,164 @@
-# Angular SSO Session Guard - Monorepositorio
+# Angular SSO Session Guard – Monorepositorio
 
-Este repositorio es un **espacio de trabajo de desarrollo** para la librería Angular `mma-sso-session-guard`.
+Workspace de desarrollo para la librería Angular `mma-sso-session-guard`
+y su aplicación de pruebas (BOD Demo App).
 
-> **Nota:** La aplicación raíz es una aplicación de demostración (playground) utilizada exclusivamente con fines de prueba y desarrollo. No está destinada a ser desplegada en entornos de producción.
+---
 
-## 📂 Estructura del Proyecto
+# 🎯 Objetivo
 
-Esta es una estructura estándar de espacio de trabajo Angular (monorepositorio):
+Resolver correctamente el SSO entre múltiples SPAs Angular
+(BOD / MásPagos) contra un mismo IdP (OpenIddict v7),
+manteniendo:
 
-*   **`projects/mma-sso-session-guard`**: 📦 **La Librería.** Este es el artefacto principal del repositorio. Contiene el código fuente, la API pública y la documentación específica de la librería.
-*   **`src/`**: 🎮 **La App de Demo.** Una aplicación de prueba utilizada para validar la funcionalidad de la librería, simular interacciones con el IdP y probar la sincronización entre pestañas.
+- Sincronización real con la cookie del IdP
+- Recover automático con `prompt=none`
+- Anti-loop por pestaña
+- Logout seguro
+- Restauración de deep-links
+- Compatibilidad Safari / BFCache
+- Soporte antiforgery opcional
 
-## 🚀 Empezando
+---
 
-### Prerrequisitos
+# 📂 Estructura
 
-*   Node.js (se recomienda v18 o superior)
-*   npm o yarn
+projects/mma-sso-session-guard  → Librería  
+src/                             → App demo BOD  
+docs/                            → Documentación técnica  
 
-### Instalación
+---
 
-Clona el repositorio e instala las dependencias:
+# 🚀 Desarrollo Local (Mac)
 
-```bash
-git clone <url-del-repositorio>
-cd <directorio-del-repositorio>
-npm install
-```
+## 1️⃣ Bajar último código
 
-### Ejecutando la Aplicación de Demo
+./bod-git-download.sh
 
-Para ver la librería en acción, inicia el servidor de desarrollo:
+Este script ejecuta:
 
-```bash
-ng serve --host=127.0.0.1 --ssl --port 4205
-```
+git fetch origin  
+git reset --hard origin/main  
+git clean -fd  
 
-Navega a `https://localhost:4205/`. La aplicación se recargará automáticamente si realizas cambios en los archivos fuente.
+---
 
-### Compilando la Librería
+## 2️⃣ Ejecutar BOD (demo)
 
-Para compilar la librería `mma-sso-session-guard` para su distribución:
+./bod-run.sh
 
-```bash
+Internamente:
+
+npm run dist:mma  
+ng serve --host=127.0.0.1 --ssl --port=4205  
+
+App disponible en:
+
+https://localhost:4205  
+
+---
+
+# 🧠 Arquitectura SSO
+
+SPA BOD  
+↓  
+angular-auth-oidc-client  
+↓  
+SsoSessionGuardService  
+↓  
+Ping IdP (/api/session/ping)  
+↓  
+Si cookie IdP y no auth local → authorize(prompt=none)  
+↓  
+AuthSessionFacade actualiza state$  
+
+---
+
+# 🔐 Flujo de Autenticación
+
+1. bootstrap()  
+2. checkAuth() (procesa code si viene del IdP)  
+3. ping IdP  
+4. si hay cookie IdP pero no tokens locales → recoverMode = promptNone  
+5. onLogin$ emite evento  
+6. deep-link restore si existe  
+
+---
+
+# 🔁 Logout Seguro
+
+logout():
+
+- marca flag anti-recover
+- limpia estado local
+- ejecuta oidc.logoff()
+
+Evita loops post-logout.
+
+---
+
+# 🔗 Deep Links
+
+La librería permite restaurar rutas como:
+
+/datos/comercio/708?v=RC-12-12345678  
+
+Siempre que coincidan con:
+
+allowedReturnUrlPrefixes: ['/datos']
+
+Restauración ocurre sólo después de login exitoso.
+
+---
+
+# 🧪 Problemas Comunes
+
+## 401 en ping
+
+Verificar:
+
+- CORS allow credentials
+- origin exacto (incluye puerto)
+- cookies SameSite=None; Secure
+
+## Safari no detecta cookie
+
+Ping puede devolver null.  
+Recover se maneja con prompt=none.
+
+---
+
+# 📦 Build Librería
+
 npm run build:mma
-```
 
-Este comando:
-1.  Compilará la librería usando `ng-packagr`.
-2.  Generará los artefactos de compilación en el directorio `dist/mma-sso-session-guard`.
-3.  Generará un archivo tarball `.tgz` listo para pruebas locales o para su publicación.
+Genera:
 
-## 📚 Documentación de la Librería
+dist/mma-sso-session-guard  
+dist/mma-sso-session-guard-<version>.tgz  
 
-Para obtener instrucciones de uso detalladas, la referencia de la API y ejemplos de configuración de la propia librería, consulta el **[README de la Librería](projects/mma-sso-session-guard/README.md)**.
+---
 
-## 🧪 Pruebas
+# 📚 Documentación Técnica
 
-Ejecuta las pruebas unitarias para la librería:
+Ver:
 
-```bash
-ng test mma-sso-session-guard
-```
+- docs/SSO_GUARD.md  
+- docs/DEEP_LINKS.md  
+- docs/CONFIG_BOD.md  
+- docs/SCRIPTS_MAC.md  
 
-## 🤝 Contribuciones
+---
 
-¡Las contribuciones son bienvenidas! Sigue estos pasos:
+# 🏛 Proyecto Municipal
 
-1.  Haz un fork del repositorio.
-2.  Crea una rama para tu funcionalidad (`git checkout -b feature/funcionalidad-increible`).
-3.  Realiza tus cambios en el directorio `projects/mma-sso-session-guard`.
-4.  Actualiza la aplicación de demo en `src/` para verificar tus cambios si es necesario.
-5.  Realiza un commit de tus cambios.
-6.  Abre un Pull Request.
+Esta implementación forma parte del ecosistema:
+
+- BOD  
+- MásPagos  
+- IdP OpenIddict (.NET 9)  
+
+Diseñado para entornos productivos multi-SPA con SSO compartido.
 
 ## 📄 Licencia
 

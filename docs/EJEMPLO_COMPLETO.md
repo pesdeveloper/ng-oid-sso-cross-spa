@@ -1,4 +1,17 @@
-## EJEMPLO completo de `app.config.ts`
+## EJEMPLO completo (ACTUALIZADO) – BOD Demo App + `mma-sso-session-guard`
+
+Este documento está alineado al estado actual (hoy):
+- `AuthSessionFacade.bootstrapOnce()` controla **todo el bootstrap** (incluye guard + OIDC + deep-link restore).
+- Deep-link restore **NO** se hace en el `App` con `setTimeout`, ni desde el `ShieldGuard`.
+- El `ShieldGuard` **no** captura returnUrl (para evitar overwrite durante callback/postLoginRoute).
+- La captura del deep-link se hace en el **SSO guard** con política **first-wins** y evitando callback URLs.
+- La restauración se realiza **después** de `onLogin$` (autenticación confirmada), de forma determinística (microtask), evitando que el guard lo bloquee.
+- Se recomienda `events: ['pageshow']` y `recoverMode: 'promptNone'`.
+- `autoBootstrap: false` para no duplicar bootstrap desde provider (lo hace el facade).
+
+---
+
+## 1) `app.config.ts` (COMPLETO)
 
 ```ts
 import {
@@ -19,12 +32,7 @@ import { authConfig } from './auth/auth.config';
 import { authInterceptor, provideAuth } from 'angular-auth-oidc-client';
 import { xsrfCrossSiteInterceptor } from './auth/xsrf-cross-site.interceptor';
 
-// ✅ Si lo consumís desde npm:
-// import { provideSsoSessionGuard, SimpleLogLevel } from 'mma-sso-session-guard';
-
-// ✅ Si lo consumís desde workspace (como en tu repo):
-import { provideSsoSessionGuard } from '../../projects/mma-sso-session-guard/src/lib/sso-session-guard.providers';
-import { SimpleLogLevel } from '../../projects/mma-sso-session-guard/src/lib/sso-session-guard.service';
+import { provideSsoSessionGuard, SimpleLogLevel } from 'mma-sso-session-guard';
 
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -48,41 +56,163 @@ export const appConfig: ApplicationConfig = {
     // SSO Session Guard
     provideSsoSessionGuard({
       appNs: 'bod',
-      pingPath: '/api/session/ping',
-      minIntervalMs: 5000,
+      logPrefix: 'BOD-SSO',
 
-      // Recomendado:
-      // events: ['pageshow', 'focus'],
+      // ✅ recomendación actual: SOLO pageshow (BFCache/back-forward)
       events: ['pageshow'],
 
-      // Office365-like (opcional)
-      forceLoginIfNoIdpSession: false,
+      // throttle ping
+      minIntervalMs: 5000,
 
-      // Recover si hay cookie IdP pero auth local no:
+      // ✅ minimiza tráfico: solo ping si la SPA cree que está auth (tiene token local)
+      onlyWhenAuthenticated: true,
+
+      // ping cookie IdP
+      pingPath: '/api/session/ping',
+
+      // recover si hay cookie IdP pero no auth local
       recoverMode: 'promptNone',
 
-      // Hacer ping incluso sin token local
-      onlyWhenAuthenticated: false,
+      // opcional modo Office365-like:
+      forceLoginIfNoIdpSession: false,
 
-      logPrefix: 'BOD-SSO',
+      // logs
       defaultLogLevel: SimpleLogLevel.Debug,
 
+      // antiforgery warm-up (best effort)
       antiforgery: {
         enabled: true,
         path: '/antiforgery/token',
-        run: 'beforePing', // 'beforePing' | 'beforeRecover' | 'bootstrap'
+        run: 'beforePing',
+        // loader: se provee internamente por la lib o por tu interceptor, según tu implementación real
       },
 
-      // deep-links permitidos
+      // ✅ NO auto bootstrap desde provider (evita duplicar)
+      autoBootstrap: false,
+
+      // ✅ deep-links permitidos (seguridad / anti open-redirect)
       allowedReturnUrlPrefixes: ['/datos'],
     }),
   ],
 };
 ```
+## 2) auth/auth.config.ts (COMPLETO)
 
----
+Nota importante: redirectUrl debe estar registrado exacto en el IdP.
+Si usás “sin callback dedicado”, redirectUrl suele ser window.location.origin.
 
-## EJEMPLO completo de `app.ts`
+```ts
+import { LogLevel, PassedInitialConfig } from 'angular-auth-oidc-client';
+import { environment } from '../../environments/environment';
+
+export const authConfig: PassedInitialConfig = {
+  config: {
+    authority: environment.authConfig.authority,
+
+    // Validaciones (según tu IdP/entorno)
+    issValidationOff: true,
+    strictIssuerValidationOnWellKnownRetrievalOff: true,
+
+    // URLs
+    redirectUrl: `${window.location.origin}`,
+    postLogoutRedirectUri: `${window.location.origin}/logout`,
+
+    // Client
+    clientId: 'js_bod_hab_client',
+    scope: 'openid profile email phone offline_access tramites',
+
+    // ⚠️ No forzar postLoginRoute a una ruta que rompa deep-links.
+    // Mantenerlo simple:
+    postLoginRoute: '/',
+
+    // Code flow + refresh tokens
+    responseType: 'code',
+    useRefreshToken: true,
+
+    // Session check / silent renew
+    startCheckSession: false,
+    silentRenew: false,
+
+    // Refresh behavior
+    ignoreNonceAfterRefresh: true,
+    triggerRefreshWhenIdTokenExpired: true,
+    renewTimeBeforeTokenExpiresInSeconds: 120,
+
+    // UserInfo
+    autoUserInfo: true,
+    renewUserInfoAfterTokenRenew: true,
+
+    // Logs
+    logLevel: LogLevel.Debug,
+
+    // secureRoutes: si lo necesitás, agregalo (cuando uses authInterceptor para APIs)
+    // secureRoutes: ['https://localhost:7301', 'https://sb-bod-api.malvinasargentinas.gob.ar'],
+  },
+};
+```
+
+## 3) app.routes.ts (COMPLETO)
+
+La ruta /datos/:sujeto/:cuenta queda protegida por ShieldGuard.
+Si el usuario no está autenticado, el guard devuelve false (NO redirige a /),
+permitiendo que el deep-link quede “en el navegador” mientras se dispara el login/recover desde el bootstrap.
+
+```ts
+import { Routes } from '@angular/router';
+import { Home } from './pages/home/home';
+import { Logout } from './pages/logout/logout';
+import { Habilitaciones } from './pages/habilitaciones/habilitaciones';
+import { ShieldGuard } from './auth/guards';
+
+export const routes: Routes = [
+  { path: '', component: Home },
+  { path: 'logout', component: Logout },
+  { path: 'habilitaciones', component: Habilitaciones },
+
+  {
+    path: 'datos/:sujeto/:cuenta',
+    loadComponent: () => import('./pages/datos/datos').then(m => m.Datos),
+    canMatch: [ShieldGuard],
+  },
+
+  { path: '**', redirectTo: '/' },
+];
+```
+## 4) auth/guards.ts (ShieldGuard FINAL)
+
+✅ No captura returnUrl (para evitar overwrite durante callback / postLoginRoute)
+✅ Solo bloquea si no está auth
+✅ Se asegura de que el bootstrap corrió (incluye checkAuth + ping + recover)
+
+```ts
+import { inject } from '@angular/core';
+import { CanMatchFn } from '@angular/router';
+import { from } from 'rxjs';
+import { map, switchMap, take } from 'rxjs/operators';
+import { AuthSessionFacade } from 'mma-sso-session-guard';
+
+export const ShieldGuard: CanMatchFn = () => {
+  const auth = inject(AuthSessionFacade);
+
+  return from(auth.bootstrapOnce()).pipe(
+    switchMap(() => auth.state$.pipe(take(1))),
+    map(s => {
+      if (s.isAuthenticated) return true;
+
+      // ✅ no redirigir a '/', no destruir deep-link
+      return false;
+    })
+  );
+};
+```
+
+## 5) app.ts (COMPLETO)
+
+Importante: el deep-link restore ya lo hace el AuthSessionFacade internamente.
+Tu app solo:
+
+- "se subscribe al estado"
+- "llama a bootstrapOnce() una sola vez (al final del ngOnInit)"
 
 ```ts
 import { CommonModule } from '@angular/common';
@@ -95,11 +225,9 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { RouterOutlet } from '@angular/router';
 import { OpenIdConfiguration } from 'angular-auth-oidc-client';
-import { Subscription } from 'rxjs';
+import { Subscription, firstValueFrom } from 'rxjs';
 
-import { AuthSessionFacade } from 'mma-sso-session-guard';
-import { AuthSessionState } from 'mma-sso-session-guard';
-
+import { AuthSessionFacade, AuthSessionState } from 'mma-sso-session-guard';
 import { environment } from '../environments/environment';
 
 @Component({
@@ -139,29 +267,7 @@ export class App implements OnInit, OnDestroy {
   private subs: Subscription[] = [];
 
   ngOnInit(): void {
-    // 1) bootstrap (incluye /logout handling, checkAuth y guard bootstrap)
-    this.auth.bootstrap();
-
-    // 2) hooks opcionales para lógica del dev
-    this.subs.push(
-      this.auth.onLogin$.subscribe(() => {
-        console.log('✅ login completado (state=true)');
-      })
-    );
-
-    this.subs.push(
-      this.auth.onLogout$.subscribe(() => {
-        console.log('✅ logout completado (state=false)');
-      })
-    );
-
-    this.subs.push(
-      this.auth.onLogoutRequested$.subscribe(() => {
-        console.log('🟡 logout iniciado (siempre se ejecuta)');
-      })
-    );
-
-    // 3) estado global
+    // 1) estado global
     this.subs.push(
       this.auth.state$.subscribe((s: AuthSessionState) => {
         this.isAuthenticated.set(!!s.isAuthenticated);
@@ -183,6 +289,14 @@ export class App implements OnInit, OnDestroy {
         this.userInfoLoadedAt.set(s.userInfoLoadedAt ?? null);
       })
     );
+
+    // 2) hooks opcionales para logs
+    this.subs.push(this.auth.onLogin$.subscribe(() => console.log('✅ login completado')));
+    this.subs.push(this.auth.onLogout$.subscribe(() => console.log('✅ logout completado')));
+    this.subs.push(this.auth.onLogoutRequested$.subscribe(() => console.log('🟡 logout solicitado')));
+
+    // 3) ✅ bootstrap al final (incluye checkAuth + ping + recover + deep-link restore)
+    void this.auth.bootstrapOnce().catch(() => {});
   }
 
   ngOnDestroy(): void {
@@ -219,20 +333,20 @@ export class App implements OnInit, OnDestroy {
     window.location.href = environment.externalSites.masPagos;
   }
 
-  mostrarAccessToken(): void {
-    this.auth.getAccessToken().subscribe(at => {
-      console.clear();
-      console.log(`AccessToken = ${at}`);
-    });
+  async mostrarAccessToken(): Promise<void> {
+    const at = await firstValueFrom(this.auth.getAccessToken());
+    console.clear();
+    console.log(`AccessToken = ${at}`);
   }
 
-  // UserInfo (si el facade lo expone)
   loadUserInfo(): void {
-    (this.auth as any).loadUserInfo?.();
+    this.auth.refreshUserInfo();
   }
 
   refreshUserInfo(): void {
-    (this.auth as any).refreshUserInfo?.();
+    // Si querés forzar reload visual:
+    (this.auth as any).clearUserInfo?.();
+    this.auth.refreshUserInfo();
   }
 
   // --------------------------
@@ -253,19 +367,19 @@ export class App implements OnInit, OnDestroy {
   // --------------------------
   private computeClientLabelFromState(s: AuthSessionState): string {
     const idp: any = s.idPayload ?? null;
+
     if (idp?.client_name) return String(idp.client_name);
     if (idp?.azp) return String(idp.azp);
 
     const cfg: any = s.config ?? null;
     const clientId = cfg?.clientId ?? cfg?.client_id ?? null;
+
     return clientId ? String(clientId) : 'No client id';
   }
 }
 ```
 
----
-
-## EJEMPLO completo de `app.html`
+## 6) app.html (COMPLETO)
 
 ```html
 <mat-toolbar color="primary">
@@ -432,5 +546,6 @@ export class App implements OnInit, OnDestroy {
 
   <router-outlet></router-outlet>
 </div>
-
 ```
+
+

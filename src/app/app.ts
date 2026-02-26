@@ -52,7 +52,6 @@ export class App implements OnInit, OnDestroy {
   private subs: Subscription[] = [];
 
   ngOnInit(): void {
-    // 2) state
     this.subs.push(
       this.auth.state$.subscribe((s: AuthSessionState) => {
         this.isAuthenticated.set(!!s.isAuthenticated);
@@ -71,7 +70,7 @@ export class App implements OnInit, OnDestroy {
       })
     );
 
-    // 3) ✅ bootstrap al final
+    // ✅ bootstrap al final
     void this.auth.bootstrapOnce().catch(() => {});
   }
 
