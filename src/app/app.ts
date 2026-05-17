@@ -6,7 +6,7 @@ import { MatDividerModule } from '@angular/material/divider';
 import { MatExpansionModule } from '@angular/material/expansion';
 import { MatIconModule } from '@angular/material/icon';
 import { MatToolbarModule } from '@angular/material/toolbar';
-import { RouterOutlet } from '@angular/router';
+import { Router, RouterOutlet } from '@angular/router';
 import { OpenIdConfiguration } from 'angular-auth-oidc-client';
 import { Subscription, firstValueFrom } from 'rxjs';
 import { environment } from '../environments/environment';
@@ -30,53 +30,45 @@ import { AuthSessionFacade, AuthSessionState, SsoSessionGuardService } from 'mma
   styleUrl: './app.scss',
 })
 export class App implements OnInit, OnDestroy {
-  clientLabel = signal('...');
+  // clientLabel = signal('...');
 
-  isAuthenticated = signal(false);
-  config = signal<Partial<OpenIdConfiguration>>({});
+  // isAuthenticated = signal(false);
+  // config = signal<Partial<OpenIdConfiguration>>({});
 
-  accessToken = signal<string>('');
-  accessPayload = signal<any | null>(null);
+  // accessToken = signal<string>('');
+  // accessPayload = signal<any | null>(null);
 
-  idToken = signal<string>('');
-  idPayload = signal<any | null>(null);
+  // idToken = signal<string>('');
+  // idPayload = signal<any | null>(null);
 
-  userInfo = signal<any | null>(null);
-  userInfoLoadedAt = signal<Date | null>(null);
+  // userInfo = signal<any | null>(null);
+  // userInfoLoadedAt = signal<Date | null>(null);
 
-  refreshing = signal(false);
+  //refreshing = signal(false);
 
   readonly auth = inject(AuthSessionFacade);
+  private readonly router = inject(Router);
+  private readonly ssoGuard = inject(SsoSessionGuardService);
   private subs: Subscription[] = [];
 
   ngOnInit(): void {
-    // 1) estado global
-    this.subs.push(
-      this.auth.state$.subscribe((s: AuthSessionState) => {
-        this.isAuthenticated.set(!!s.isAuthenticated);
-
-        if (s.config) {
-          this.config.set(s.config);
-          this.clientLabel.set(this.computeClientLabelFromState(s));
-        } else {
-          this.clientLabel.set('...');
-        }
-
-        this.accessToken.set(s.accessToken ?? '');
-        this.accessPayload.set(s.accessPayload ?? null);
-
-        this.idToken.set(s.idToken ?? '');
-        this.idPayload.set(s.idPayload ?? null);
-
-        this.userInfo.set(s.userInfo ?? null);
-        this.userInfoLoadedAt.set(s.userInfoLoadedAt ?? null);
-      })
-    );
-
-    // 2) hooks opcionales para logs
-    this.subs.push(this.auth.onLogin$.subscribe(() => console.log('✅ login completado')));
-    this.subs.push(this.auth.onLogout$.subscribe(() => console.log('✅ logout completado')));
-    this.subs.push(this.auth.onLogoutRequested$.subscribe(() => console.log('🟡 logout solicitado')));
+    // this.subs.push(
+    //   this.auth.state$.subscribe((s: AuthSessionState) => {
+    //     this.isAuthenticated.set(!!s.isAuthenticated);
+    //     if (s.config) {
+    //       this.config.set(s.config);
+    //       this.clientLabel.set(this.computeClientLabelFromState(s));
+    //     } else {
+    //       this.clientLabel.set('...');
+    //     }
+    //     this.accessToken.set(s.accessToken ?? '');
+    //     this.accessPayload.set(s.accessPayload ?? null);
+    //     this.idToken.set(s.idToken ?? '');
+    //     this.idPayload.set(s.idPayload ?? null);
+    //     this.userInfo.set(s.userInfo ?? null);
+    //     this.userInfoLoadedAt.set(s.userInfoLoadedAt ?? null);
+    //   })
+    // );
 
     // ✅ bootstrap al final
     void this.auth.bootstrapOnce().catch(() => {});
@@ -100,18 +92,13 @@ export class App implements OnInit, OnDestroy {
   }
 
   refreshSession(): void {
-    if (this.refreshing()) return;
-    this.refreshing.set(true);
-
-    this.auth.refresh().subscribe({
-      next: (_) => this.refreshing.set(false),
-      error: (_) => this.refreshing.set(false),
-    });
+    this.auth.refresh().subscribe();
   }
 
   goUserProfile(): void {
     this.auth.goUserProfile();
   }
+
 
   get urlConDeepLink(): string {
     return environment.externalSites.urlConDeepLink;
@@ -125,6 +112,7 @@ export class App implements OnInit, OnDestroy {
   get urlSbMasPagosConDeepLink(): string {
     return environment.externalSites.urlSbMasPagosConDeepLink;
   }
+
 
   goUrlConDeepLink(): void {
     window.location.href = environment.externalSites.urlConDeepLink;
@@ -141,6 +129,7 @@ export class App implements OnInit, OnDestroy {
   goUrlSbMasPagosConDeepLink(): void {
     window.location.href = environment.externalSites.urlSbMasPagosConDeepLink;
   }
+
 
   async mostrarAccessToken(): Promise<void> {
     const at = await firstValueFrom(this.auth.getAccessToken());
@@ -185,15 +174,15 @@ export class App implements OnInit, OnDestroy {
   // Label (desde el STATE)
   // --------------------------
 
-  private computeClientLabelFromState(s: AuthSessionState): string {
-    const idp: any = s.idPayload ?? null;
+  // private computeClientLabelFromState(s: AuthSessionState): string {
+  //   const idp: any = s.idPayload ?? null;
 
-    if (idp?.client_name) return String(idp.client_name);
-    if (idp?.azp) return String(idp.azp);
+  //   if (idp?.client_name) return String(idp.client_name);
+  //   if (idp?.azp) return String(idp.azp);
 
-    const cfg: any = s.config ?? null;
-    const clientId = cfg?.clientId ?? cfg?.client_id ?? null;
+  //   const cfg = s.config as any;
+  //   const clientId = cfg?.clientId ?? cfg?.client_id ?? null;
 
-    return clientId ? String(clientId) : 'No client id';
-  }
+  //   return clientId ? String(clientId) : 'No client id';
+  // }
 }
