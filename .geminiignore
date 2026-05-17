@@ -1,0 +1,29 @@
+# --- Carpetas de Compilación y Dependencias (CERO ESCANEO) ---
+node_modules/
+.angular/
+dist/
+tmp/
+out-tsc/
+bazel-out/
+
+# --- Archivos del Sistema e IDEs ---
+.git/
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+
+# --- Documentación antigua o pesada que no querés que procese en masa ---
+.gemini-context/
+./docs/
+
+# --- Archivos de logs y reportes ---
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+.pnpm-debug.log*
+coverage/

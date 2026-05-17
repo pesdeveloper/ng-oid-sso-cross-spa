@@ -1,0 +1,7 @@
+{
+    "google.gemini.chat.systemInstruction": "CRITICAL RULE: You have READ-ONLY permission for the folder 'projects/mma-sso-session-guard/'. You are strictly forbidden from modifying, creating, or deleting any files inside this path. You may only modify files inside './src' or the designated documentation files.",
+    "geminicodeassist.chat.systemInstruction": "CRITICAL RULE: You have READ-ONLY permission for the folder 'projects/mma-sso-session-guard/'. You are strictly forbidden from modifying, creating, or deleting any files inside this path. You may only modify files inside './src' or the designated documentation files.",
+    // "geminicodeassist.chat.autoApplyChanges": true,
+    // "google.gemini.chat.autoApplyChanges": true,
+    // "geminicodeassist.agent.autoAcceptEdits": true
+}

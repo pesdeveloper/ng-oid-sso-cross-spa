@@ -3,6 +3,8 @@
 **Path**: `src/app/auth/sso-session-guard.service.ts`
 **Providers Path**: `src/app/auth/sso-session-guard.providers.ts`
 
+> **Nota de Arquitectura**: Si bien este servicio contiene la lógica central de sincronización de sesión, la integración en la aplicación se realiza a través del **`AuthSessionFacade`**. El facade simplifica el uso del guard y lo combina con `angular-auth-oidc-client` para proporcionar una API unificada y robusta.
+
 ## Description
 Guard avanzado y servicio de "Keep-Alive" para sesiones OIDC en SPAs. Su objetivo principal es sincronizar el estado de sesión local (tokens en navegador) con el estado de sesión en el Identity Provider (IdP) mediante cookies.
 
@@ -23,7 +25,7 @@ Guard avanzado y servicio de "Keep-Alive" para sesiones OIDC en SPAs. Su objetiv
 - **appNs**: Namespace para claves de storage (e.g., 'bod').
 - **pingPath**: Endpoint del IdP (default: `/api/session/ping`).
 - **minIntervalMs**: Throttle para evitar exceso de pings (default: 5000ms).
-- **events**: Eventos monitoreados: `['pageshow', 'focus']`.
+- **events**: Eventos monitoreados: `['pageshow']` (recomendación actual para manejar BFCache).
 - **onlyWhenAuthenticated**: Si `false`, monitorea incluso sin tokens (permite detectar login externo).
 - **recoverMode**: Estrategia de recuperación: `promptNone` (usa iframe silencioso).
 - **antiforgery**:
@@ -33,6 +35,6 @@ Guard avanzado y servicio de "Keep-Alive" para sesiones OIDC en SPAs. Su objetiv
 
 ## Core Methods
 - `start(options)`: Inicializa los hooks y la configuración.
-- `bootstrapAuthOnce(params)`: Realiza un ping inicial y opcionalmente un `checkAuth` para sincronizar el estado al arrancar.
+- `bootstrapAuthOnce(params)`: Realiza un ping inicial y opcionalmente un `checkAuth` para sincronizar el estado al arrancar. (Nota: Típicamente invocado por el `AuthSessionFacade`).
 - `markLogoutFromThisApp()`: Setea un flag en `sessionStorage` para evitar que el guard intente recuperar la sesión tras un cierre voluntario.
 - `clearLogoutDisabledFlag()`: Limpia el flag de logout para permitir nuevas recuperaciones.

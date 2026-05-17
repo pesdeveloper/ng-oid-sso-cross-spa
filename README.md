@@ -61,27 +61,27 @@ https://localhost:4205
 # 🧠 Arquitectura SSO
 
 SPA BOD  
+↓
+AuthSessionFacade (mma-sso-session-guard)
 ↓  
-angular-auth-oidc-client  
-↓  
-SsoSessionGuardService  
+angular-auth-oidc-client + SsoSessionGuardService
 ↓  
 Ping IdP (/api/session/ping)  
 ↓  
 Si cookie IdP y no auth local → authorize(prompt=none)  
 ↓  
-AuthSessionFacade actualiza state$  
+El facade actualiza state$ y emite eventos (onLogin$)
 
 ---
 
 # 🔐 Flujo de Autenticación
 
-1. bootstrap()  
-2. checkAuth() (procesa code si viene del IdP)  
-3. ping IdP  
-4. si hay cookie IdP pero no tokens locales → recoverMode = promptNone  
-5. onLogin$ emite evento  
-6. deep-link restore si existe  
+1. `AuthSessionFacade.bootstrapOnce()` es invocado en el `AppComponent`.
+2. El facade internamente ejecuta `checkAuth()` para procesar el callback del IdP.
+3. Ejecuta el ping del `SsoSessionGuard` para sincronizar con la cookie del IdP.
+4. Si es necesario, dispara la recuperación silenciosa (`prompt=none`).
+5. Una vez autenticado, emite el evento `onLogin$`.
+6. Restaura el deep-link (si existía) de forma segura.
 
 ---
 
@@ -89,9 +89,10 @@ AuthSessionFacade actualiza state$
 
 logout():
 
-- marca flag anti-recover
-- limpia estado local
-- ejecuta oidc.logoff()
+- La app llama a `AuthSessionFacade.logout()`.
+- El facade marca un flag anti-recuperación para la pestaña actual.
+- Limpia el estado local de OIDC.
+- Redirige al IdP para invalidar la sesión central.
 
 Evita loops post-logout.
 

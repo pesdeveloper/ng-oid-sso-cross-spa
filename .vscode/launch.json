@@ -3,13 +3,17 @@
   "version": "0.2.0",
   "configurations": [
     {
-      //ng serve --host=127.0.0.1 --ssl --port 4200 
       "name": "HTTPS",
-      "type": "msedge",
+      "type": "chrome",
       "request": "launch",
       "url": "https://localhost:4205/",
-      "webRoot": "${workspaceFolder}",
+      "userDataDir": "${workspaceFolder}/.vscode/chrome-debug-profile",
+      "runtimeArgs": [
+        //"--incognito",
+        "--ignore-certificate-errors"
+      ],
       "sourceMaps": true,
+      "webRoot": "${workspaceFolder}",
       "sourceMapPathOverrides": {
         "webpack:/*": "${webRoot}/*",
         "/./*": "${webRoot}/*",
