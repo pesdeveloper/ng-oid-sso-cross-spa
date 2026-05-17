@@ -23,7 +23,7 @@ Configuración centralizada en `src/app/auth/auth.config.ts`.
     - `SsoSessionGuardService` activo para validación de cookie de sesión IdP.
     - `autoUserInfo: true`: Carga automática de datos de usuario.
     - `silentRenew: false`: Desactivado en favor del manejo por Refresh tokens.
-    - `postLoginRoute`: Se mantiene en `/` para no interferir con la restauración de deep-links.
+    - `postLoginRoute`: Redirige a `/datos` tras el login.
 
 ### Routing (`app.routes.ts`)
 | Path | Component | Description |
@@ -38,7 +38,7 @@ Configurada en `app.config.ts`.
 - `provideHttpClient`: Con `withFetch`, `withXsrfConfiguration` y `withInterceptors`.
 - `provideAuth`: Inicializa OIDC.
 - `provideSsoSessionGuard`: Configura el servicio de monitoreo de sesión.
-    - **Events**: `pageshow` (recomendado para BFCache).
+    - **Events**: `pageshow`, `focus`.
     - **Recover Mode**: `promptNone` (Intenta recuperar sesión silenciosamente si hay cookie IdP).
     - **Antiforgery**: Habilitado (`run: 'beforePing'`).
 

@@ -3,17 +3,19 @@
 **Path**: `src/app/app.ts`
 
 ## Description
-Componente raíz y Shell de la aplicación. Es responsable de inicializar el flujo de autenticación a través del `AuthSessionFacade` y de renderizar la UI principal basada en el estado de la sesión.
+Componente raíz de la aplicación. Orquesta la inicialización de la seguridad, la interfaz principal (Shell) y la integración con el `SsoSessionGuardService`.
 
 ## Dependencies
-- `AuthSessionFacade`: El punto de entrada principal para toda la gestión de sesión y autenticación.
+- `OidcSecurityService`: Gestión de autenticación OIDC.
+- `SsoSessionGuardService`: Servicio de monitoreo de sesión y recuperación.
 - `Router`: Navegación.
+- `HttpClient`: Peticiones HTTP auxiliares.
 
 ## Key Features
 - **Auth State**: Señales para `isAuthenticated`, `accessToken`, `accessPayload`, `idToken`, `idPayload`, `userInfo`, etc.
 - **Session Management**: 
-    - Delegación completa de la gestión de sesión al `AuthSessionFacade`.
-    - Una única llamada a `auth.bootstrapOnce()` en `ngOnInit` se encarga de todo el proceso de inicialización, incluyendo `checkAuth`, ping al IdP, recuperación silenciosa y restauración de deep-links.
+    - Integración profunda con `SsoSessionGuardService` para pings al IdP y recuperación silenciosa.
+    - Llamada a `ssoGuard.bootstrapAuthOnce({ doCheckAuth: true })` en el inicio.
 - **Token payloads**: Expone datos decodificados de los tokens y carga de UserInfo manual mediante paneles expansibles de Angular Material.
 - **UI Shell**: 
     - `mat-toolbar` para el título dinámico (Client Name).
@@ -28,17 +30,23 @@ Componente raíz y Shell de la aplicación. Es responsable de inicializar el flu
 ## Logic Flow
 
 ### Initialization (`ngOnInit`)
-1.  **State Subscription**: Se suscribe al observable `auth.state$` del `AuthSessionFacade`. Cada vez que el estado de la sesión cambia, actualiza las señales locales del componente (`isAuthenticated`, `idPayload`, `userInfo`, etc.).
-2.  **Event Hooks (Opcional)**: Se suscribe a eventos del facade como `onLogin$` y `onLogout$` para logging o efectos secundarios.
-3.  **Bootstrap**: Invoca `auth.bootstrapOnce()` al final del `ngOnInit`. Esta es la acción clave que dispara todo el flujo de autenticación y sincronización de sesión. La llamada es asíncrona y su posible rechazo se maneja para no bloquear la app.
+1.  **Logout Check**: Si la ruta empieza con `/logout`:
+    -   `ssoGuard.markLogoutFromThisApp()`: Evita que el guard intente recuperar la sesión.
+    -   `oidcSecurityService.logoffLocal()`: Limpia el estado local.
+2.  **Auth Subscription**: Suscribe a `isAuthenticated$`:
+    -   Actualiza la señal `isAuthenticated`.
+    -   Carga la configuración OIDC y actualiza etiquetas (`title`).
+    -   Si está autenticado: `ssoGuard.clearLogoutDisabledFlag()` para permitir recuperaciones futuras.
+    -   Carga payloads de Access y ID tokens.
+3.  **Bootstrap**: Ejecuta `ssoGuard.bootstrapAuthOnce({ doCheckAuth: true })` tras el `checkAuth` inicial de OIDC.
 
 ### Authentication Methods
-- `login()`: Llama a `auth.login()`.
-- `logout()`: Llama a `auth.logout()`.
-- `refreshSession()`: Llama a `auth.refresh()`.
-- `goUserProfile()`: Llama a `auth.goUserProfile()`.
+- `login()`: Llama a `authorize()`.
+- `logout()`: Marca logout en el guard y ejecuta `logoff()` en el IdP.
+- `refreshSession()`: Fuerza la renovación del token.
+- `goUserProfile()`: Redirige al perfil del usuario en el IdP.
 - `goToMasPagos()`: Salto externo a otra SPA (`https://localhost:4203`).
 
 ### Data Loading
-- Los payloads de los tokens se obtienen directamente del `AuthSessionState` (`s.accessPayload`, `s.idPayload`).
-- `loadUserInfo()` / `refreshUserInfo()`: Invocan los métodos correspondientes del facade (`auth.refreshUserInfo()`) para cargar o forzar la recarga de la información del usuario.
+- `loadAccessTokenPayload()` / `loadIdTokenPayload()`: Decodifica tokens y actualiza las señales.
+- `loadUserInfo()`: Petición explícita al endpoint de UserInfo del IdP con Bearer token.
