@@ -3,26 +3,19 @@
   padding: 16px;
 }
 
-mat-card {
-  padding: 16px;
-  margin-bottom: 16px;
+.app-toolbar {
+  gap: 8px;
 }
 
-.mat-expansion-panel-header .mat-panel-title,
-.mat-expansion-panel-header .mat-expansion-panel-header-title {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
+.toolbar-title {
+  font-size: 1rem;
+  font-weight: 500;
 }
 
-.mat-expansion-panel-header .mat-panel-title mat-icon,
-.mat-expansion-panel-header .mat-expansion-panel-header-title mat-icon {
-  font-size: 22px; width: 22px; height: 22px; line-height: 22px;
+.toolbar-spacer {
+  flex: 1 1 auto;
 }
 
-.spin {
-  animation: spin 1s linear infinite;
-}
-@keyframes spin {
-  100% { transform: rotate(360deg); }
+.toolbar-action {
+  color: inherit;
 }

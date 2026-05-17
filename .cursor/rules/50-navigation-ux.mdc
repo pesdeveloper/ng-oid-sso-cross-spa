@@ -1,0 +1,27 @@
+---
+description: Reglas de navegación UX para pantallas internas Angular
+globs:
+  - "src/app/**/*.ts"
+  - "src/app/**/*.html"
+alwaysApply: true
+---
+
+Toda pantalla nueva que no sea Home debe incluir una acción visible “Volver al inicio” que navegue a `/`.
+
+La navegación debe hacerse con Router.navigate(['/']) o una alternativa Angular equivalente.
+
+No usar href plano salvo que el usuario lo pida explícitamente.
+
+La acción debe ser visible y clara para el usuario, por ejemplo:
+- botón “Volver al inicio”
+- botón con ícono de volver + texto “Volver al inicio”
+
+Esta regla aplica especialmente a:
+- /habilitaciones
+- /habilitaciones/:valueId
+- futuras pantallas de Cementerio
+- futuras pantallas de flujos BOD
+
+No quitar login/logout del app bar global.
+No mezclar paneles técnicos de autenticación en pantallas internas.
+Los paneles técnicos de autenticación, tokens, user info y diagnóstico deben quedar solo en Home.

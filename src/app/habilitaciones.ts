@@ -6,30 +6,28 @@ import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 
 @Component({
-  selector: 'app-datos',
+  selector: 'app-habilitaciones',
   standalone: true,
   imports: [CommonModule, MatButtonModule, MatCardModule, MatIconModule],
-  templateUrl: './datos.html',
-  styleUrl: './datos.scss'
+  templateUrl: './habilitaciones.html',
+  styleUrl: './habilitaciones.scss',
 })
-export class Datos implements OnInit {
+export class Habilitaciones implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
 
-  sujeto = signal<string | null>(null);
-  cuenta = signal<string | null>(null);
-  valor = signal<string | null>(null);
+  readonly valueId = signal<string | null>(null);
 
-  ngOnInit() {
-    console.log('BOD: Datos.ngOnInit() <<<<<');
+  readonly pasos = [
+    'Alta cuenta comercio/persona',
+    'Emitir tasa de habilitaciones',
+    'Continuar a MASPagos',
+    'Leer cuenta corriente',
+  ];
 
-    this.route.paramMap.subscribe(params => {
-      this.sujeto.set(params.get('sujeto'));
-      this.cuenta.set(params.get('cuenta'));
-    });
-
-    this.route.queryParamMap.subscribe(params => {
-      this.valor.set(params.get('v'));
+  ngOnInit(): void {
+    this.route.paramMap.subscribe((params) => {
+      this.valueId.set(params.get('valueId'));
     });
   }
 

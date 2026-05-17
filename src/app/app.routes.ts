@@ -13,5 +13,17 @@ export const routes: Routes = [
             import('./pages/datos/datos').then(m => m.Datos),
         canMatch: [ShieldGuard]   // ⭐ clave
     },
+    {
+        path: 'habilitaciones',
+        loadComponent: () =>
+            import('./habilitaciones').then(m => m.Habilitaciones),
+        canMatch: [ShieldGuard],
+    },
+    {
+        path: 'habilitaciones/:valueId',
+        loadComponent: () =>
+            import('./habilitaciones').then(m => m.Habilitaciones),
+        canMatch: [ShieldGuard],
+    },
     { path: '**', redirectTo: '/' },
 ];

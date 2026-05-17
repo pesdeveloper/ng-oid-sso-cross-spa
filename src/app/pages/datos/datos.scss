@@ -1,7 +1,15 @@
 .datos-container {
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
   padding: 2rem;
+}
+
+.volver-inicio {
+  align-self: flex-start;
+  margin-bottom: 12px;
+  max-width: 500px;
+  width: 100%;
 }
 
 .datos-card {
