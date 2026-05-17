@@ -1,0 +1,37 @@
+---
+description: Estilo de trabajo con Cursor para este repo.
+globs: "**/*"
+alwaysApply: true
+---
+
+# Estilo de trabajo con Cursor
+
+Trabajar por slices mínimos.
+
+Orden recomendado:
+
+1. Base UX/ruta `/habilitaciones`, sin HTTP.
+2. Paso visual “Alta cuenta comercio/persona”, sin HTTP.
+3. Mock factory con `@ngneat/falso`, sin HTTP real.
+4. `BodApiService` y modelos mínimos, sin conectar toda la UI.
+5. Conectar alta real.
+6. Emisión Habilitaciones.
+7. MASPagos + `ReturnUrl`.
+8. Cuenta corriente + retorno `/habilitaciones/:valueId`.
+
+No mezclar varios slices en un solo cambio.
+
+Para cada slice:
+
+- modificar solo los archivos necesarios;
+- compilar;
+- resumir archivos cambiados;
+- no tocar auth;
+- no tocar documentación salvo pedido explícito;
+- no instalar dependencias salvo pedido explícito.
+
+Si se usa `@ngneat/falso`:
+
+- no usar `randUuid()`;
+- para sufijos únicos usar `Date.now().toString().slice(-6)`;
+- usar valores fijos válidos para IDs/catálogos municipales.

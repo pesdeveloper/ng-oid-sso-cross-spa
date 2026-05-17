@@ -1,0 +1,35 @@
+---
+description: No tocar autenticación, OIDC, guards ni session guard salvo instrucción explícita.
+globs: "src/app/**/*.ts,src/app/**/*.html,src/app/**/*.scss,src/environments/*.ts"
+alwaysApply: true
+---
+
+# Guardia crítica: no romper OIDC/SSO
+
+No modificar lógica de autenticación salvo instrucción explícita del usuario.
+
+Está prohibido tocar sin autorización explícita:
+
+- `src/app/auth/*`
+- `src/app/app.config.ts`
+- configuración de `angular-auth-oidc-client`
+- `mma-sso-session-guard`
+- `AuthSessionFacade`
+- guards existentes
+- `ShieldGuard`
+- `redirectUri`
+- `postLogoutRedirectUri`
+- `authority`
+- `issuer`
+- `clientId`
+- `scopes`
+- silent renew
+- storage OIDC
+- callback handling
+- bootstrap auth/session
+
+También está prohibido agregar o modificar `secureRoutes` hasta que el usuario pida específicamente integrar llamadas HTTP reales a BOD API.
+
+Si un slice de UI puede resolverse sin auth, no tocar auth.
+
+Si aparece un error tipo `CodeVerifier is not set`, no intentar “arreglar” auth con cambios nuevos: avisar que probablemente hay storage/callback sucio o cambios indebidos en auth.

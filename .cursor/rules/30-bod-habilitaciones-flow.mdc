@@ -1,0 +1,48 @@
+---
+description: Reglas del flujo BOD Habilitaciones/MASPagos.
+globs: "src/app/habilitaciones*,src/app/core/**/*,src/environments/*.ts"
+alwaysApply: false
+---
+
+# Flujo BOD Habilitaciones
+
+Usar `.cursor/context/BOD_API_ENDPOINTS_BOD_API.md` como fuente de verdad.
+
+No inventar endpoints ni contratos.
+
+Flujo funcional esperado:
+
+1. Alta cuenta comercio/persona.
+2. Emitir tasa de habilitaciones.
+3. Continuar a MASPagos.
+4. Leer cuenta corriente.
+
+Ruta base:
+
+`/habilitaciones`
+
+Ruta de retorno desde MASPagos:
+
+`/habilitaciones/:valueId`
+
+El retorno de MASPagos debe permitir reconstruir estado leyendo BOD API por `valueId`.
+
+## MASPagos
+
+El campo del backend se llama exactamente:
+
+`Link_To_MasPagos`
+
+No renombrarlo a camelCase si complica el binding.
+
+El botón “Continuar a MASPagos” no debe abrir pestaña nueva. Debe navegar en la misma pestaña:
+
+`window.location.href = linkToMasPagos;`
+
+## ReturnUrl
+
+Cuando se emite la tasa, el request debe enviar `ReturnUrl` con formato:
+
+`{environment.externalSites.defaultReturnUrl}/habilitaciones/{valueId}`
+
+Para Habilitaciones, si el alta devuelve `id_Des`, usar `id_Des` como `valueId`, salvo que el documento de endpoints indique otro valor.

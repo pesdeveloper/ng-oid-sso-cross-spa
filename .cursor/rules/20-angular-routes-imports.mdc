@@ -1,0 +1,54 @@
+---
+description: Reglas obligatorias para rutas, imports dinámicos y Habilitaciones.
+globs: "src/app/app.routes.ts,src/app/**/*.ts"
+alwaysApply: true
+---
+
+# Reglas obligatorias de rutas e imports Angular
+
+Antes de modificar un import dinámico o una ruta, verificar físicamente dónde existe el archivo real.
+
+No asumir convenciones genéricas como `src/app/pages/{feature}/{feature}.ts` si el repo no usa esa ubicación para ese componente.
+
+## Habilitaciones
+
+El componente Habilitaciones debe vivir directamente bajo:
+
+`src/app/habilitaciones.ts`
+
+Debe exportar exactamente:
+
+`export class Habilitaciones`
+
+Las rutas correctas desde `src/app/app.routes.ts` son:
+
+`loadComponent: () => import('./habilitaciones').then(m => m.Habilitaciones)`
+
+Está prohibido usar para Habilitaciones:
+
+`import('./pages/habilitaciones/habilitaciones')`
+
+Está prohibido crear o mover Habilitaciones a:
+
+- `src/app/pages/habilitaciones/`
+- `src/app/pages/habilitaciones/habilitaciones.ts`
+
+salvo que el usuario lo pida explícitamente.
+
+## Rutas esperadas de Habilitaciones
+
+Mantener ambas rutas apuntando al mismo componente:
+
+- `/habilitaciones`
+- `/habilitaciones/:valueId`
+
+Si las rutas protegidas usan `canMatch: [ShieldGuard]`, mantenerlo también en Habilitaciones.
+
+## Verificación obligatoria
+
+Antes de finalizar cambios de rutas:
+
+- cada `loadComponent` debe apuntar a un archivo real;
+- cada `.then(m => m.X)` debe usar un export real;
+- no cambiar nombres de clases por estética (`Habilitaciones` no debe pasar a `HabilitacionesComponent` si la ruta espera `Habilitaciones`);
+- no tocar auth.

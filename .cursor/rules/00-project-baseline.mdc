@@ -1,0 +1,29 @@
+---
+description: Contexto base del repo Angular BOD/IDP. Aplicar siempre.
+globs: "**/*"
+alwaysApply: true
+---
+
+# Contexto base obligatorio
+
+Este repo es una app Angular standalone de prueba para IDP/SSO, BOD API y MASPagos.
+
+El objetivo actual es incorporar flujos de prueba reales de BOD API, empezando por Habilitaciones, sin romper el login OIDC/SSO existente.
+
+Reglas generales:
+
+- Trabajar en slices chicos y revisables.
+- No hacer refactors amplios.
+- No mover archivos por preferencia estética.
+- No normalizar estructura Angular si el repo ya usa otra convención.
+- No tocar documentación salvo que el usuario lo pida explícitamente.
+- No crear endpoints backend nuevos.
+- No crear endpoints demo/mock en backend.
+- Consumir APIs reales de BOD API cuando el slice lo pida.
+- No hardcodear URLs nuevas dentro de services.
+- Si se necesitan URLs, usar `environment`.
+
+Archivos de contexto que Cursor debe consultar antes de tocar integración BOD o rutas:
+
+- `.cursor/context/BOD_API_ENDPOINTS_BOD_API.md`
+- `.cursor/context/REGLAS_RUTAS_ANGULAR.md`
