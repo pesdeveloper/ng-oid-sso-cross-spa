@@ -33,17 +33,132 @@
         <p class="modo-hint">
           Comenzá el flujo desde el primer paso. Las acciones se habilitarán en slices posteriores.
         </p>
-      }
 
-      <h3 class="pasos-title">Pasos del flujo</h3>
-      <ol class="pasos-list">
-        @for (paso of pasos; track paso; let i = $index) {
-          <li class="paso-item">
-            <span class="paso-num">{{ i + 1 }}</span>
-            <span class="paso-text">{{ paso }}</span>
-          </li>
-        }
-      </ol>
+        <section class="paso-bloque paso-bloque--activo">
+          <h3 class="paso-bloque-title">Paso 1 — Alta cuenta comercio/persona</h3>
+          <p class="paso-bloque-desc">
+            Prepará los datos mínimos para crear la cuenta de habilitación en BOD.
+          </p>
+
+          <div class="alta-acciones-principales">
+            @if (!altaFormVisible) {
+              <button mat-raised-button color="primary" (click)="prepararAlta()">
+                <mat-icon fontSet="material-icons">edit_note</mat-icon>
+                Preparar alta comercio/persona
+              </button>
+            }
+            <button mat-stroked-button type="button" (click)="generarDatosMockAlta()">
+              <mat-icon fontSet="material-icons">auto_fix_high</mat-icon>
+              Generar datos mock
+            </button>
+          </div>
+
+          @if (altaFormVisible) {
+            <form class="alta-form" (ngSubmit)="marcarAltaPreparada()">
+              <div class="alta-form-grid">
+                <label class="alta-field">
+                  <span>Razón social / titular</span>
+                  <input
+                    type="text"
+                    name="razonSocial"
+                    [(ngModel)]="altaForm.razonSocial"
+                    (ngModelChange)="actualizarPreview()"
+                  />
+                </label>
+
+                <label class="alta-field">
+                  <span>Nombre fantasía</span>
+                  <input
+                    type="text"
+                    name="nombreFantasia"
+                    [(ngModel)]="altaForm.nombreFantasia"
+                    (ngModelChange)="actualizarPreview()"
+                  />
+                </label>
+
+                <label class="alta-field">
+                  <span>CUIT</span>
+                  <input
+                    type="text"
+                    name="cuit"
+                    [(ngModel)]="altaForm.cuit"
+                    (ngModelChange)="actualizarPreview()"
+                  />
+                </label>
+
+                <label class="alta-field">
+                  <span>Email</span>
+                  <input
+                    type="email"
+                    name="email"
+                    [(ngModel)]="altaForm.email"
+                    (ngModelChange)="actualizarPreview()"
+                  />
+                </label>
+
+                <label class="alta-field">
+                  <span>Teléfono</span>
+                  <input
+                    type="text"
+                    name="telefono"
+                    [(ngModel)]="altaForm.telefono"
+                    (ngModelChange)="actualizarPreview()"
+                  />
+                </label>
+
+                <label class="alta-field alta-field--wide">
+                  <span>Domicilio comercio</span>
+                  <input
+                    type="text"
+                    name="domicilioComercio"
+                    [(ngModel)]="altaForm.domicilioComercio"
+                    (ngModelChange)="actualizarPreview()"
+                  />
+                </label>
+
+                <label class="alta-field alta-field--wide">
+                  <span>Domicilio postal</span>
+                  <input
+                    type="text"
+                    name="domicilioPostal"
+                    [(ngModel)]="altaForm.domicilioPostal"
+                    (ngModelChange)="actualizarPreview()"
+                  />
+                </label>
+              </div>
+
+              @if (requestPreview) {
+                <div class="request-preview">
+                  <h4 class="request-preview-title">Request preview</h4>
+                  <pre>{{ requestPreview | json }}</pre>
+                </div>
+              }
+
+              <div class="alta-form-actions">
+                <button mat-stroked-button type="button" (click)="cancelarAlta()">Cancelar</button>
+                <button mat-raised-button color="primary" type="submit">Enviar alta</button>
+              </div>
+            </form>
+          }
+
+          @if (altaPreparada) {
+            <p class="estado-alta estado-alta--ok">
+              Alta preparada localmente. Próximo slice: integración con BOD API.
+            </p>
+          }
+        </section>
+
+        <h3 class="pasos-title">Pasos pendientes</h3>
+        <ol class="pasos-list">
+          @for (paso of pasosPendientes; track paso; let i = $index) {
+            <li class="paso-item paso-item--pendiente">
+              <span class="paso-num">{{ i + 2 }}</span>
+              <span class="paso-text">{{ paso }}</span>
+              <span class="paso-badge">Pendiente</span>
+            </li>
+          }
+        </ol>
+      }
     </mat-card-content>
   </mat-card>
 </div>

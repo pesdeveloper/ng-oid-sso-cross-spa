@@ -72,3 +72,137 @@
 .paso-text {
   flex: 1;
 }
+
+.paso-bloque {
+  margin-bottom: 24px;
+  padding: 16px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+  background: #fafafa;
+}
+
+.paso-bloque--activo {
+  border-color: #90caf9;
+  background: #f5f9ff;
+}
+
+.paso-bloque-title {
+  margin: 0 0 8px;
+  font-size: 1.05rem;
+}
+
+.paso-bloque-desc {
+  margin: 0 0 16px;
+  opacity: 0.85;
+  font-size: 0.95rem;
+}
+
+.alta-acciones-principales {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.alta-form {
+  margin-top: 8px;
+}
+
+.alta-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px 16px;
+  margin-bottom: 16px;
+}
+
+.alta-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.9rem;
+
+  span {
+    font-weight: 500;
+    color: #444;
+  }
+
+  input {
+    padding: 8px 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 0.95rem;
+    font-family: inherit;
+
+    &:focus {
+      outline: 2px solid #90caf9;
+      border-color: #64b5f6;
+    }
+  }
+}
+
+.alta-field--wide {
+  grid-column: 1 / -1;
+}
+
+.alta-form-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.request-preview {
+  margin: 16px 0;
+  padding: 12px;
+  border-radius: 6px;
+  background: #263238;
+  color: #eceff1;
+  overflow-x: auto;
+}
+
+.request-preview-title {
+  margin: 0 0 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #b0bec5;
+}
+
+.request-preview pre {
+  margin: 0;
+  font-size: 0.85rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.estado-alta {
+  margin: 16px 0 0;
+  padding: 10px 12px;
+  border-radius: 6px;
+  font-size: 0.95rem;
+}
+
+.estado-alta--ok {
+  background: #e8f5e9;
+  color: #2e7d32;
+  border: 1px solid #a5d6a7;
+}
+
+.estado-alta--hint {
+  background: #fff8e1;
+  color: #f57f17;
+  border: 1px solid #ffe082;
+}
+
+.paso-item--pendiente {
+  opacity: 0.75;
+}
+
+.paso-badge {
+  margin-left: auto;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: #eeeeee;
+  color: #616161;
+}
