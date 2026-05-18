@@ -19,28 +19,69 @@
       </button>
     </div>
 
-    <mat-card appearance="outlined" style="margin-top: 24px; padding: 16px;">
-      <h3 style="margin-top: 0; margin-bottom: 16px;">Flujos de prueba BOD</h3>
-      <button mat-raised-button color="primary" (click)="goHabilitaciones()" style="height: 48px; font-size: 1.1em;">
-        <mat-icon fontSet="material-icons">assignment</mat-icon>
-        Flujo Habilitaciones
-      </button>
+    <mat-card appearance="outlined" class="bod-flujos-card">
+      <h3 class="bod-flujos-title">Flujos de prueba BOD</h3>
+      <div class="bod-flujos-grid">
+        <div class="bod-flujo-item">
+          <button mat-raised-button color="primary" class="bod-flujo-btn" (click)="goHabilitaciones()">
+            <mat-icon fontSet="material-icons">assignment</mat-icon>
+            Flujo Habilitaciones
+          </button>
+          <p class="bod-flujo-ayuda">Alta, emisión, MASPagos y cuenta.</p>
+        </div>
+        <div class="bod-flujo-item">
+          <button mat-raised-button color="accent" class="bod-flujo-btn" (click)="goHabilitacionesCuenta()">
+            <mat-icon fontSet="material-icons">account_balance</mat-icon>
+            Consultar cuenta corriente
+          </button>
+          <p class="bod-flujo-ayuda">Abrir la pantalla de consulta manual.</p>
+        </div>
+        <div class="bod-flujo-item">
+          <button mat-stroked-button class="bod-flujo-btn" (click)="goHabilitacionesCuentaPorValueId()">
+            <mat-icon fontSet="material-icons">tag</mat-icon>
+            Consultar por ValueId
+          </button>
+          <p class="bod-flujo-ayuda">Buscar deuda/referencias de un trámite.</p>
+        </div>
+        <div class="bod-flujo-item">
+          <button mat-stroked-button class="bod-flujo-btn" (click)="goHabilitacionesCuentaPorIdBie()">
+            <mat-icon fontSet="material-icons">numbers</mat-icon>
+            Consultar por Id_Bie
+          </button>
+          <p class="bod-flujo-ayuda">Consultar deuda de una cuenta existente.</p>
+        </div>
+        <div class="bod-flujo-item">
+          <button mat-raised-button color="primary" class="bod-flujo-btn" (click)="goCementerio()">
+            <mat-icon fontSet="material-icons">park</mat-icon>
+            Flujo Cementerio
+          </button>
+          <p class="bod-flujo-ayuda">Registro, emisión y cuenta (destino cementerio).</p>
+        </div>
+        <div class="bod-flujo-item">
+          <button mat-stroked-button class="bod-flujo-btn" (click)="goCementerioCuentaPorValueId()">
+            <mat-icon fontSet="material-icons">tag</mat-icon>
+            Cementerio por ValueId
+          </button>
+          <p class="bod-flujo-ayuda">Consulta manual en /bod/cuenta.</p>
+        </div>
+        <div class="bod-flujo-item">
+          <button mat-stroked-button class="bod-flujo-btn" (click)="goCementerioCuentaPorIdBie()">
+            <mat-icon fontSet="material-icons">numbers</mat-icon>
+            Cementerio por Id_Bie
+          </button>
+          <p class="bod-flujo-ayuda">Consulta por id_Bie en /bod/cuenta.</p>
+        </div>
+      </div>
     </mat-card>
 
     <br />
     <p>Is Authenticated:<strong> {{ auth.isAuthenticated() }}</strong></p>
   </mat-card>
-} @else {
-  <mat-card>
-    <p style="opacity: 0.8; margin-top: 0;">Iniciá sesión desde la barra superior para ver diagnóstico y flujos de prueba.</p>
-  </mat-card>
-}
+  <mat-divider></mat-divider>
+  <br />
 
-<mat-divider></mat-divider>
-<br />
-
-<!-- Configuración -->
-<mat-expansion-panel>
+  <!-- Configuración -->
+  <mat-expansion-panel>
   <mat-expansion-panel-header>
     <mat-panel-title>
       <mat-icon fontSet="material-icons">settings</mat-icon>
@@ -167,3 +208,8 @@
     </p>
   }
 </mat-expansion-panel>
+} @else {
+  <mat-card>
+    <p class="home-guest-message">Iniciá sesión para acceder a los flujos BOD.</p>
+  </mat-card>
+}

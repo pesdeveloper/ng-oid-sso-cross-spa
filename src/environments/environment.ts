@@ -1,5 +1,8 @@
 export const environment = {
   production: false,
+  apis: {
+    bodBaseUrl: 'https://sb-bod-api.malvinasargentinas.gob.ar',
+  },
   authConfig: {
     //authority: 'https://localhost:7301',
     authority: 'https://sb-idp.malvinasargentinas.gob.ar',

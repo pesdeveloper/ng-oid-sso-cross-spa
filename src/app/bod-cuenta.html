@@ -1,0 +1,448 @@
+<div class="bod-cuenta-container">
+  <div class="cuenta-navegacion-superior">
+    @if (tieneReturnTo()) {
+      <button mat-stroked-button class="volver-flujo" (click)="volverAlOrigen()">
+        <mat-icon fontSet="material-icons">reply</mat-icon>
+        {{ textoVolverAlFlujo() }}
+      </button>
+    }
+    <button mat-stroked-button class="volver-inicio" (click)="volverAlInicio()">
+      <mat-icon fontSet="material-icons">arrow_back</mat-icon>
+      Volver al inicio
+    </button>
+  </div>
+
+  <mat-card class="bod-cuenta-card">
+    <mat-card-header>
+      <mat-card-title>Cuenta Corriente BOD</mat-card-title>
+      <mat-card-subtitle>
+        Consulta BOD.Cuentas por destino — {{ destinoActualLabel() }}
+      </mat-card-subtitle>
+    </mat-card-header>
+
+    <mat-card-content>
+      @if (modoManual()) {
+        <section class="cuenta-manual">
+          <h3 class="cuenta-manual-title">Consultar cuenta corriente</h3>
+
+          <form class="cuenta-manual-form" (ngSubmit)="consultarManual()">
+            <label class="cuenta-manual-field">
+              <span>Destino</span>
+              <select name="manualDestino" [(ngModel)]="manualDestino">
+                @for (destino of destinos; track destino.value) {
+                  <option [value]="destino.value">{{ destino.label }}</option>
+                }
+              </select>
+            </label>
+
+            <label class="cuenta-manual-field">
+              <span>Modo de consulta</span>
+              <select name="modoConsulta" [(ngModel)]="modoConsulta">
+                <option value="idBie">Por Id_Bie</option>
+                <option value="valueId">Por ValueId</option>
+              </select>
+            </label>
+
+            @if (modoConsulta === 'idBie') {
+              <label class="cuenta-manual-field">
+                <span>Id_Bie</span>
+                <input
+                  type="number"
+                  name="manualIdBie"
+                  min="1"
+                  step="1"
+                  [(ngModel)]="manualIdBie"
+                  placeholder="Ej: 195796"
+                />
+              </label>
+            } @else {
+              <label class="cuenta-manual-field">
+                <span>ValueId</span>
+                <input
+                  type="text"
+                  name="manualValueId"
+                  [(ngModel)]="manualValueId"
+                  placeholder="Ej: HAB-DEMO-20260517-123456"
+                />
+              </label>
+            }
+
+            <div class="cuenta-manual-acciones">
+              <button mat-raised-button color="primary" type="submit" [disabled]="cargando">
+                <mat-icon fontSet="material-icons">search</mat-icon>
+                @if (esModoValueId()) {
+                  Consultar cuenta por ValueId
+                } @else {
+                  Consultar cuenta
+                }
+              </button>
+
+              @if (esModoValueId()) {
+                <button
+                  mat-stroked-button
+                  type="button"
+                  (click)="consultarReferencias()"
+                  [disabled]="referenciasCargando || cargando"
+                >
+                  <mat-icon fontSet="material-icons">link</mat-icon>
+                  Consultar referencias
+                </button>
+              }
+            </div>
+          </form>
+
+          <p class="cuenta-manual-ayuda">
+            También podés abrir esta pantalla con
+            /bod/cuenta/{{ '{' }}idSuj{{ '}' }}/{{ '{' }}idBie{{ '}' }}?destino=habilitaciones
+            (o /habilitaciones/cuenta/... por compatibilidad) para consulta directa por id_Bie.
+          </p>
+        </section>
+      } @else {
+        <p class="modo-label modo-retorno">
+          <mat-icon fontSet="material-icons">reply</mat-icon>
+          Consulta directa por ruta
+        </p>
+      }
+
+      @if (!modoManual() || tieneConsultaManualActiva) {
+        <dl class="cuenta-ids">
+          @if (idSuj() != null) {
+            <div class="cuenta-id-item">
+              <dt>id_Suj</dt>
+              <dd>{{ idSuj() }}</dd>
+            </div>
+          }
+          @if (idBie() != null) {
+            <div class="cuenta-id-item">
+              <dt>id_Bie</dt>
+              <dd>{{ idBie() }}</dd>
+            </div>
+          }
+          @if (valueIdConsultado) {
+            <div class="cuenta-id-item">
+              <dt>ValueId</dt>
+              <dd>{{ valueIdConsultado }}</dd>
+            </div>
+          }
+          <div class="cuenta-id-item">
+            <dt>Destino usado</dt>
+            <dd>{{ destinoUsado() }}</dd>
+          </div>
+        </dl>
+      }
+
+      @if (puedeRecargarCuenta()) {
+        <div class="cuenta-acciones">
+          <button
+            mat-stroked-button
+            type="button"
+            (click)="recargarCuenta()"
+            [disabled]="cargando"
+          >
+            <mat-icon fontSet="material-icons">refresh</mat-icon>
+            Recargar cuenta
+          </button>
+        </div>
+      }
+
+      @if (cargando) {
+        <p class="cuenta-estado cuenta-estado--loading">Consultando cuenta...</p>
+      }
+
+      @if (error) {
+        <p class="cuenta-estado cuenta-estado--error">{{ error }}</p>
+      }
+
+      @if (referenciasCargando) {
+        <p class="cuenta-estado cuenta-estado--loading">Consultando referencias...</p>
+      }
+
+      @if (referenciasError) {
+        <p class="cuenta-estado cuenta-estado--error">{{ referenciasError }}</p>
+      }
+
+      @if (cuenta) {
+        <section class="cuenta-resumen">
+          <h3 class="cuenta-resumen-title">Resumen</h3>
+
+          <p class="cuenta-estado-badge">{{ estadoCuentaTexto }}</p>
+
+          <div class="cuenta-totales-grid">
+            <div class="cuenta-total-card">
+              <span class="cuenta-total-label">Total vencido</span>
+              <strong class="cuenta-total-value">{{ formatMoney(totalVencido) }}</strong>
+            </div>
+            <div class="cuenta-total-card">
+              <span class="cuenta-total-label">Total a vencer</span>
+              <strong class="cuenta-total-value">{{ formatMoney(totalAVencer) }}</strong>
+            </div>
+            <div class="cuenta-total-card">
+              <span class="cuenta-total-label">Total bloqueado</span>
+              <strong class="cuenta-total-value">{{ formatMoney(totalBloqueado) }}</strong>
+            </div>
+          </div>
+        </section>
+
+        @if (tieneConceptos) {
+          <section class="cuenta-conceptos">
+            <h3 class="cuenta-conceptos-title">Conceptos</h3>
+            <ul class="cuenta-conceptos-list">
+              @for (concepto of conceptos; track $index) {
+                <li class="cuenta-concepto-item">
+                  <p class="cuenta-concepto-nombre">{{ conceptoEtiqueta(concepto) }}</p>
+                  <p class="cuenta-concepto-detalle">
+                    Vencido: {{ formatMoney(concepto.sven_Total) }}
+                    · A vencer: {{ formatMoney(concepto.saven_Total) }}
+                    · Bloqueado: {{ formatMoney(concepto.sbloq_Total) }}
+                  </p>
+                  <p class="cuenta-concepto-meta">
+                    Comprobantes: {{ cantidadComprobantes(concepto) }}
+                  </p>
+                </li>
+              }
+            </ul>
+          </section>
+        }
+
+        <section class="cuenta-comprobantes">
+          <h3 class="cuenta-comprobantes-title">Comprobantes</h3>
+
+          @if (!tieneComprobantes) {
+            <p class="cuenta-comprobantes-vacio">No hay comprobantes para mostrar.</p>
+          } @else {
+            <div class="cuenta-comprobantes-tabla-wrap">
+              <table class="cuenta-comprobantes-tabla">
+                <thead>
+                  <tr>
+                    <th class="cuenta-comprobantes-tabla-seleccion">Seleccionar</th>
+                    <th>Comprobante</th>
+                    <th>Ejercicio</th>
+                    <th>Concepto</th>
+                    <th>Vto. 1</th>
+                    <th>Vto. 2</th>
+                    <th>Estado</th>
+                    <th class="cuenta-comprobantes-tabla-saldo">Saldo</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (c of comprobantes; track c.selectionKey) {
+                    <tr [class.cuenta-comprobante-no-pagable]="!isComprobantePagable(c)">
+                      <td class="cuenta-comprobantes-tabla-seleccion">
+                        @if (isComprobantePagable(c)) {
+                          <label class="cuenta-comprobante-checkbox">
+                            <input
+                              type="checkbox"
+                              [checked]="isComprobanteSelected(c)"
+                              (change)="toggleComprobante(c)"
+                            />
+                          </label>
+                        } @else {
+                          <span class="cuenta-comprobante-no-sel">{{ motivoNoSeleccionable(c) }}</span>
+                        }
+                      </td>
+                      <td>{{ comprobanteEtiqueta(c) }}</td>
+                      <td>{{ c.eje ?? '—' }}</td>
+                      <td>
+                        <span class="cuenta-comprobante-concepto">{{ c.concepto }}</span>
+                        @if (c.cuotaInfoDeno) {
+                          <span class="cuenta-comprobante-secundario">{{ c.cuotaInfoDeno }}</span>
+                        }
+                        @if (c.cuotaInfoDenoExtra) {
+                          <span class="cuenta-comprobante-secundario">{{ c.cuotaInfoDenoExtra }}</span>
+                        }
+                      </td>
+                      <td>{{ formatDate(c.vto1) }}</td>
+                      <td>{{ formatDate(c.vto2) }}</td>
+                      <td><span class="cuenta-comprobante-estado">{{ c.estado }}</span></td>
+                      <td class="cuenta-comprobantes-tabla-saldo">{{ formatMoney(c.saldo) }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+
+            <p class="cuenta-seleccion-resumen">
+              Comprobantes seleccionados: {{ cantidadComprobantesSeleccionados }}
+            </p>
+          }
+        </section>
+
+        <section class="cuenta-rc">
+          <h3 class="cuenta-rc-title">Generar RC / link de pago</h3>
+
+          @if (mensajeEstadoGenerarRc) {
+            <p class="cuenta-estado cuenta-estado--hint">{{ mensajeEstadoGenerarRc }}</p>
+          }
+
+          @if (advertenciaSinCuentaRelacionada) {
+            <p class="cuenta-estado cuenta-estado--hint">{{ advertenciaSinCuentaRelacionada }}</p>
+          }
+
+          <div class="cuenta-rc-acciones">
+            <button
+              mat-raised-button
+              color="primary"
+              type="button"
+              (click)="generarRc()"
+              [disabled]="rcGenerando || !puedeGenerarRc"
+            >
+              <mat-icon fontSet="material-icons">receipt_long</mat-icon>
+              Generar RC
+            </button>
+          </div>
+
+          @if (rcGenerando) {
+            <p class="cuenta-estado cuenta-estado--loading">Generando RC...</p>
+          }
+
+          @if (rcError) {
+            <p class="cuenta-estado cuenta-estado--error">{{ rcError }}</p>
+          }
+
+          @if (rcMensaje) {
+            <p class="cuenta-estado cuenta-estado--ok">{{ rcMensaje }}</p>
+          }
+
+          @if (rcData) {
+            <div class="cuenta-rc-resultado">
+              @if (rcEtiqueta) {
+                <p class="cuenta-rc-dato">
+                  <strong>RC generado:</strong> {{ rcEtiqueta }}
+                </p>
+              }
+              @if (rcLinkToMasPagos) {
+                <p class="cuenta-rc-dato">
+                  <strong>Link MASPagos:</strong>
+                </p>
+                <p class="cuenta-rc-link">{{ rcLinkToMasPagos }}</p>
+                <button
+                  mat-raised-button
+                  color="accent"
+                  type="button"
+                  class="cuenta-rc-btn-maspagos"
+                  (click)="continuarMasPagosRc()"
+                >
+                  <mat-icon fontSet="material-icons">open_in_browser</mat-icon>
+                  Continuar a MASPagos
+                </button>
+              }
+              @if (rcData.rc && currentValueId.trim()) {
+                <button
+                  mat-stroked-button
+                  type="button"
+                  class="cuenta-rc-btn-pdf"
+                  (click)="descargarRcPdf()"
+                  [disabled]="rcPdfDescargando"
+                >
+                  <mat-icon fontSet="material-icons">picture_as_pdf</mat-icon>
+                  Descargar PDF del RC
+                </button>
+              }
+              @if (rcPdfDescargando) {
+                <p class="cuenta-estado cuenta-estado--loading">Descargando PDF...</p>
+              }
+              @if (rcPdfError) {
+                <p class="cuenta-estado cuenta-estado--error">{{ rcPdfError }}</p>
+              }
+            </div>
+          }
+
+          @if (rcResponse) {
+            <div class="cuenta-response cuenta-response--rc">
+              <h4 class="cuenta-response-title">Respuesta técnica — RC</h4>
+              <pre>{{ rcResponse | json }}</pre>
+            </div>
+          }
+        </section>
+
+        <div class="cuenta-response cuenta-response--tecnica">
+          <h4 class="cuenta-response-title">Respuesta técnica — cuenta</h4>
+          <pre>{{ cuenta | json }}</pre>
+        </div>
+      }
+
+      @if (referenciasResponse || referenciasCargando) {
+        <section class="cuenta-referencias">
+          <h3 class="cuenta-referencias-title">Cuentas relacionadas</h3>
+
+          @if (cuentasRelacionadas.length > 1 && (currentIdSuj == null || currentIdBie == null)) {
+            <p class="cuenta-estado cuenta-estado--hint">
+              Este valueId tiene más de una cuenta relacionada. Elegí una cuenta para poder generar
+              RC.
+            </p>
+          }
+
+          @if (cuentasRelacionadas.length === 0 && !referenciasCargando) {
+            <p class="cuenta-referencias-vacio">No hay cuentas relacionadas para este valueId.</p>
+          } @else if (cuentasRelacionadas.length > 0) {
+            <div class="cuenta-referencias-tabla-wrap">
+              <table class="cuenta-referencias-tabla">
+                <thead>
+                  <tr>
+                    <th>id_Suj</th>
+                    <th>id_Bie</th>
+                    <th>Acción</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (ref of cuentasRelacionadas; track $index) {
+                    <tr [class.cuenta-referencias-fila--activa]="esCuentaRelacionadaSeleccionada(ref)">
+                      <td>{{ ref.idSuj }}</td>
+                      <td>{{ ref.idBie }}</td>
+                      <td>
+                        <button
+                          mat-stroked-button
+                          type="button"
+                          (click)="verCuentaRelacionada(ref)"
+                          [disabled]="cargando"
+                        >
+                          Ver cuenta
+                        </button>
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+
+          <h3 class="cuenta-referencias-title cuenta-referencias-title--secundario">
+            Comprobantes referenciados
+          </h3>
+
+          @if (comprobantesReferenciados.length === 0) {
+            <p class="cuenta-referencias-vacio">
+              No hay comprobantes referenciados para este valueId.
+            </p>
+          } @else {
+            <div class="cuenta-referencias-tabla-wrap">
+              <table class="cuenta-referencias-tabla">
+                <thead>
+                  <tr>
+                    <th>cmte</th>
+                    <th>pref</th>
+                    <th>nro</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (ref of comprobantesReferenciados; track $index) {
+                    <tr>
+                      <td>{{ ref.cmte }}</td>
+                      <td>{{ ref.pref }}</td>
+                      <td>{{ ref.nro }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+
+          <div class="cuenta-response cuenta-response--referencias">
+            <h4 class="cuenta-response-title">Respuesta técnica — referencias</h4>
+            <pre>{{ referenciasResponse | json }}</pre>
+          </div>
+        </section>
+      }
+    </mat-card-content>
+  </mat-card>
+</div>

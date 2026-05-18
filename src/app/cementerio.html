@@ -1,0 +1,285 @@
+<div class="cementerio-container">
+  <button mat-stroked-button class="volver-inicio" (click)="volverAlInicio()">
+    <mat-icon fontSet="material-icons">arrow_back</mat-icon>
+    Volver al inicio
+  </button>
+
+  <mat-card class="cementerio-card">
+    <mat-card-header>
+      <mat-card-title>Flujo Cementerio</mat-card-title>
+      <mat-card-subtitle>
+        Pruebas BOD — destino cuenta corriente: cementerio
+      </mat-card-subtitle>
+    </mat-card-header>
+
+    <mat-card-content>
+      <p class="cementerio-desc">
+        Alta de registro, emisión de tasas comunes y cuenta corriente vía
+        <strong>/bod/cuenta</strong> con <code>destino=cementerio</code>.
+      </p>
+
+      <ol class="pasos-list">
+        <li class="paso-item">
+          <span class="paso-num">1</span>
+          <span class="paso-text">Registro / cuenta cementerio</span>
+        </li>
+        <li class="paso-item">
+          <span class="paso-num">2</span>
+          <span class="paso-text">Emisión cementerio</span>
+        </li>
+        <li class="paso-item">
+          <span class="paso-num">3</span>
+          <span class="paso-text">Cuenta corriente</span>
+        </li>
+        <li class="paso-item">
+          <span class="paso-num">4</span>
+          <span class="paso-text">RC / MASPagos / PDF</span>
+        </li>
+      </ol>
+
+      <section class="paso-bloque paso-bloque--activo">
+        <h3 class="paso-bloque-title">Caso demo</h3>
+        <p class="paso-bloque-desc">
+          Generá un valueId y datos de prueba. Ajustá el formulario antes de crear el registro.
+        </p>
+
+        <div class="cementerio-acciones">
+          <button mat-raised-button color="primary" type="button" (click)="prepararCasoDemo()">
+            <mat-icon fontSet="material-icons">auto_fix_high</mat-icon>
+            Preparar caso demo cementerio
+          </button>
+        </div>
+
+        @if (valueId) {
+          <dl class="cementerio-estado">
+            <div class="cementerio-estado-item">
+              <dt>ValueId</dt>
+              <dd>{{ valueId }}</dd>
+            </div>
+            <div class="cementerio-estado-item">
+              <dt>id_Suj</dt>
+              <dd>{{ idSuj ?? '—' }}</dd>
+            </div>
+            <div class="cementerio-estado-item">
+              <dt>id_Bie</dt>
+              <dd>{{ idBie ?? '—' }}</dd>
+            </div>
+          </dl>
+        }
+
+        <form class="cementerio-form" (ngSubmit)="$event.preventDefault()">
+          <div class="cementerio-form-grid">
+            <label class="cementerio-field">
+              <span>Titular — nombre</span>
+              <input type="text" name="titularNombre" [(ngModel)]="cementerioForm.titularNombre" />
+            </label>
+            <label class="cementerio-field">
+              <span>Titular — apellido</span>
+              <input
+                type="text"
+                name="titularApellido"
+                [(ngModel)]="cementerioForm.titularApellido"
+              />
+            </label>
+            <label class="cementerio-field">
+              <span>Titular — documento</span>
+              <input
+                type="text"
+                name="titularDocumento"
+                [(ngModel)]="cementerioForm.titularDocumento"
+              />
+            </label>
+            <label class="cementerio-field">
+              <span>Fallecido — nombre</span>
+              <input
+                type="text"
+                name="fallecidoNombre"
+                [(ngModel)]="cementerioForm.fallecidoNombre"
+              />
+            </label>
+            <label class="cementerio-field">
+              <span>Fallecido — apellido</span>
+              <input
+                type="text"
+                name="fallecidoApellido"
+                [(ngModel)]="cementerioForm.fallecidoApellido"
+              />
+            </label>
+            <label class="cementerio-field">
+              <span>Documento fallecido</span>
+              <input
+                type="text"
+                name="fallecidoDocumento"
+                [(ngModel)]="cementerioForm.fallecidoDocumento"
+              />
+            </label>
+            <label class="cementerio-field">
+              <span>Edad</span>
+              <input type="number" name="edad" [(ngModel)]="cementerioForm.edad" min="0" />
+            </label>
+            <label class="cementerio-field cementerio-field--wide">
+              <span>Ubicación</span>
+              <input type="text" name="ubicacion" [(ngModel)]="cementerioForm.ubicacion" />
+            </label>
+            <label class="cementerio-field">
+              <span>Sepultura / nicho</span>
+              <select name="sepulturaONicho" [(ngModel)]="cementerioForm.sepulturaONicho">
+                <option value="S">Sepultura</option>
+                <option value="N">Nicho</option>
+                <option value="D">Depósito</option>
+                <option value="O">Osario</option>
+              </select>
+            </label>
+            <label class="cementerio-field">
+              <span>Sexo</span>
+              <select name="sexo" [(ngModel)]="cementerioForm.sexo">
+                <option value="M">Masculino</option>
+                <option value="F">Femenino</option>
+                <option value="O">Otro</option>
+                <option value="N">NN</option>
+              </select>
+            </label>
+            <label class="cementerio-field">
+              <span>Fila</span>
+              <input type="text" name="fila" [(ngModel)]="cementerioForm.fila" />
+            </label>
+            <label class="cementerio-field cementerio-field--check">
+              <input
+                type="checkbox"
+                name="siDePartido"
+                [(ngModel)]="cementerioForm.siDePartido"
+              />
+              <span>Si de partido</span>
+            </label>
+          </div>
+        </form>
+
+        @if (mensaje) {
+          <p class="cementerio-estado-msg cementerio-estado-msg--ok">{{ mensaje }}</p>
+        }
+
+        @if (error) {
+          <p class="cementerio-estado-msg cementerio-estado-msg--error">{{ error }}</p>
+        }
+      </section>
+
+      <section class="paso-bloque">
+        <h3 class="paso-bloque-title">Paso 1 — Alta registro</h3>
+        <p class="paso-bloque-desc">Crea el registro de fallecido en BOD API.</p>
+
+        <div class="cementerio-acciones">
+          <button
+            mat-raised-button
+            color="primary"
+            type="button"
+            (click)="enviarAltaCementerio()"
+            [disabled]="altaEnviando || !valueId"
+          >
+            <mat-icon fontSet="material-icons">person_add</mat-icon>
+            Crear registro Cementerio
+          </button>
+        </div>
+
+        @if (altaEnviando) {
+          <p class="cementerio-loading">Creando registro…</p>
+        }
+
+        @if (altaResponse) {
+          <div class="response-preview">
+            <p class="response-preview-title">altaResponse</p>
+            <pre>{{ altaResponse | json }}</pre>
+          </div>
+          <dl class="cementerio-estado cementerio-estado--compact">
+            <div class="cementerio-estado-item">
+              <dt>id_Suj</dt>
+              <dd>{{ idSuj ?? '—' }}</dd>
+            </div>
+            <div class="cementerio-estado-item">
+              <dt>id_Bie</dt>
+              <dd>{{ idBie ?? '—' }}</dd>
+            </div>
+          </dl>
+        }
+      </section>
+
+      <section class="paso-bloque">
+        <h3 class="paso-bloque-title">Paso 2 — Emisión tasa común</h3>
+        <p class="paso-bloque-desc">
+          Emite tasa manual (id_Tri 76, id_Tas 1) contra la cuenta del fallecido.
+        </p>
+
+        <div class="cementerio-acciones">
+          <button
+            mat-raised-button
+            color="accent"
+            type="button"
+            (click)="emitirTasaCementerio()"
+            [disabled]="emisionEnviando || !idBie"
+          >
+            <mat-icon fontSet="material-icons">receipt_long</mat-icon>
+            Emitir tasa Cementerio
+          </button>
+
+          @if (linkToMasPagos) {
+            <button mat-raised-button color="warn" type="button" (click)="continuarMasPagos()">
+              <mat-icon fontSet="material-icons">payment</mat-icon>
+              Continuar a MASPagos
+            </button>
+          }
+        </div>
+
+        @if (emisionEnviando) {
+          <p class="cementerio-loading">Emitiendo tasa…</p>
+        }
+
+        @if (emisionResponse) {
+          <div class="response-preview">
+            <p class="response-preview-title">emisionResponse</p>
+            <pre>{{ emisionResponse | json }}</pre>
+          </div>
+        }
+
+        @if (linkToMasPagos) {
+          <div class="link-preview">
+            <p class="response-preview-title">Link_To_MasPagos</p>
+            <pre>{{ linkToMasPagos }}</pre>
+          </div>
+        }
+      </section>
+
+      <section class="paso-bloque">
+        <h3 class="paso-bloque-title">Paso 3 — Cuenta corriente</h3>
+        <p class="paso-bloque-desc">Consultá la cuenta en /bod/cuenta.</p>
+
+        <div class="cementerio-acciones">
+          <button
+            mat-raised-button
+            color="accent"
+            type="button"
+            (click)="consultarCuentaPorValueId()"
+          >
+            <mat-icon fontSet="material-icons">tag</mat-icon>
+            Ver cuenta por ValueId
+          </button>
+
+          <button
+            mat-stroked-button
+            type="button"
+            (click)="consultarCuentaPorIdBie()"
+            [disabled]="!puedeConsultarPorIdBie()"
+          >
+            <mat-icon fontSet="material-icons">numbers</mat-icon>
+            Ver cuenta por Id_Bie
+          </button>
+        </div>
+      </section>
+
+      <section class="paso-bloque">
+        <h3 class="paso-bloque-title">Paso 4 — RC, PDF y MASPagos</h3>
+        <p class="paso-bloque-desc">
+          RC, PDF y MASPagos también se pueden gestionar desde /bod/cuenta.
+        </p>
+      </section>
+    </mat-card-content>
+  </mat-card>
+</div>

@@ -54,7 +54,7 @@
           </div>
 
           @if (altaFormVisible) {
-            <form class="alta-form" (ngSubmit)="marcarAltaPreparada()">
+            <form class="alta-form" (ngSubmit)="enviarAlta()">
               <div class="alta-form-grid">
                 <label class="alta-field">
                   <span>Razón social / titular</span>
@@ -135,29 +135,165 @@
               }
 
               <div class="alta-form-actions">
-                <button mat-stroked-button type="button" (click)="cancelarAlta()">Cancelar</button>
-                <button mat-raised-button color="primary" type="submit">Enviar alta</button>
+                <button mat-stroked-button type="button" (click)="cancelarAlta()" [disabled]="altaEnviando">
+                  Cancelar
+                </button>
+                <button mat-raised-button color="primary" type="submit" [disabled]="altaEnviando">
+                  @if (altaEnviando) {
+                    Enviando...
+                  } @else {
+                    Enviar alta
+                  }
+                </button>
               </div>
             </form>
           }
 
-          @if (altaPreparada) {
-            <p class="estado-alta estado-alta--ok">
-              Alta preparada localmente. Próximo slice: integración con BOD API.
+          @if (altaError) {
+            <p class="estado-alta estado-alta--error">{{ altaError }}</p>
+          }
+
+          @if (altaMensaje) {
+            <p class="estado-alta estado-alta--ok">{{ altaMensaje }}</p>
+          }
+
+          @if (altaIdSuj != null) {
+            <p class="estado-alta estado-alta--hint">
+              id_Suj: <strong>{{ altaIdSuj }}</strong>
+              · id_Bie: <strong>{{ altaIdBie }}</strong>
+              @if (altaValueId != null) {
+                · id_Des: <strong>{{ altaValueId }}</strong>
+              }
             </p>
+          }
+
+          @if (altaResponse) {
+            <div class="request-preview response-preview">
+              <h4 class="request-preview-title">Response BOD API</h4>
+              <pre>{{ altaResponse | json }}</pre>
+            </div>
           }
         </section>
 
-        <h3 class="pasos-title">Pasos pendientes</h3>
-        <ol class="pasos-list">
-          @for (paso of pasosPendientes; track paso; let i = $index) {
-            <li class="paso-item paso-item--pendiente">
-              <span class="paso-num">{{ i + 2 }}</span>
-              <span class="paso-text">{{ paso }}</span>
-              <span class="paso-badge">Pendiente</span>
-            </li>
+        <section
+          class="paso-bloque"
+          [class.paso-bloque--activo]="puedeEmitirTasa()"
+        >
+          <h3 class="paso-bloque-title">Paso 2 — Emitir tasa de habilitaciones</h3>
+          <p class="paso-bloque-desc">
+            Emite las tasas contra BOD API. El retorno a MASPagos apuntará a
+            /habilitaciones/cuenta/:idSuj/:idBie.
+          </p>
+
+          <button
+            mat-raised-button
+            color="primary"
+            type="button"
+            (click)="emitirTasa()"
+            [disabled]="!puedeEmitirTasa() || emisionEnviando"
+          >
+            <mat-icon fontSet="material-icons">receipt_long</mat-icon>
+            @if (emisionEnviando) {
+              Emitiendo...
+            } @else {
+              Emitir tasa de habilitaciones
+            }
+          </button>
+
+          @if (!puedeEmitirTasa()) {
+            <p class="estado-alta estado-alta--hint">
+              Completá el Paso 1 y obtené id_Suj e id_Bie para habilitar la emisión.
+            </p>
           }
-        </ol>
+
+          @if (emisionError) {
+            <p class="estado-alta estado-alta--error">{{ emisionError }}</p>
+          }
+
+          @if (emisionMensaje) {
+            <p class="estado-alta estado-alta--ok">{{ emisionMensaje }}</p>
+          }
+
+          @if (linkToMasPagos) {
+            <div class="request-preview link-preview">
+              <h4 class="request-preview-title">Link_To_MasPagos (previsualización)</h4>
+              <pre>{{ linkToMasPagos }}</pre>
+            </div>
+          }
+
+          @if (emisionResponse) {
+            <div class="request-preview response-preview">
+              <h4 class="request-preview-title">Response emisión BOD API</h4>
+              <pre>{{ emisionResponse | json }}</pre>
+            </div>
+          }
+        </section>
+
+        <section
+          class="paso-bloque"
+          [class.paso-bloque--activo]="linkToMasPagos != null"
+        >
+          <h3 class="paso-bloque-title">Paso 3 — Continuar a MASPagos</h3>
+          <p class="paso-bloque-desc">
+            Pagá la tasa emitida en MASPagos. Al finalizar, volverás a la pantalla de cuenta.
+          </p>
+
+          <button
+            mat-raised-button
+            color="primary"
+            type="button"
+            (click)="continuarMasPagos()"
+            [disabled]="!linkToMasPagos || emisionEnviando"
+          >
+            <mat-icon fontSet="material-icons">payments</mat-icon>
+            Continuar a MASPagos
+          </button>
+
+          <p class="paso-bloque-ayuda">
+            Se abrirá MASPagos en esta misma pestaña. Al finalizar, volverá a la pantalla de
+            cuenta de Habilitaciones.
+          </p>
+
+          @if (masPagosError) {
+            <p class="estado-alta estado-alta--error">{{ masPagosError }}</p>
+          }
+        </section>
+
+        <section
+          class="paso-bloque"
+          [class.paso-bloque--activo]="puedeVerCuentaCorriente()"
+        >
+          <h3 class="paso-bloque-title">Paso 4 — Consultar cuenta corriente</h3>
+          <p class="paso-bloque-desc">
+            Consultá saldos y conceptos de la cuenta sin pasar por MASPagos.
+          </p>
+
+          <button
+            mat-raised-button
+            color="primary"
+            type="button"
+            (click)="verCuentaCorriente()"
+            [disabled]="!puedeVerCuentaCorriente()"
+          >
+            <mat-icon fontSet="material-icons">account_balance</mat-icon>
+            Ver cuenta corriente
+          </button>
+
+          <p class="paso-bloque-ayuda">
+            Permite consultar la cuenta directamente mientras se resuelve la navegación desde
+            MASPagos.
+          </p>
+
+          @if (!puedeVerCuentaCorriente()) {
+            <p class="estado-alta estado-alta--hint">
+              Completá el Paso 1 y obtené id_Suj e id_Bie para habilitar la consulta.
+            </p>
+          }
+
+          @if (cuentaCorrienteError) {
+            <p class="estado-alta estado-alta--error">{{ cuentaCorrienteError }}</p>
+          }
+        </section>
       }
     </mat-card-content>
   </mat-card>

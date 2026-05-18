@@ -14,9 +14,39 @@ export const routes: Routes = [
         canMatch: [ShieldGuard]   // ⭐ clave
     },
     {
+        path: 'bod/cuenta',
+        loadComponent: () =>
+            import('./bod-cuenta').then(m => m.BodCuenta),
+        canMatch: [ShieldGuard],
+    },
+    {
+        path: 'bod/cuenta/:idSuj/:idBie',
+        loadComponent: () =>
+            import('./bod-cuenta').then(m => m.BodCuenta),
+        canMatch: [ShieldGuard],
+    },
+    {
+        path: 'cementerio',
+        loadComponent: () =>
+            import('./cementerio').then(m => m.Cementerio),
+        canMatch: [ShieldGuard],
+    },
+    {
         path: 'habilitaciones',
         loadComponent: () =>
             import('./habilitaciones').then(m => m.Habilitaciones),
+        canMatch: [ShieldGuard],
+    },
+    {
+        path: 'habilitaciones/cuenta',
+        loadComponent: () =>
+            import('./bod-cuenta').then(m => m.BodCuenta),
+        canMatch: [ShieldGuard],
+    },
+    {
+        path: 'habilitaciones/cuenta/:idSuj/:idBie',
+        loadComponent: () =>
+            import('./bod-cuenta').then(m => m.BodCuenta),
         canMatch: [ShieldGuard],
     },
     {

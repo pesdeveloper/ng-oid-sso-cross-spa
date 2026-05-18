@@ -31,3 +31,48 @@ mat-card {
     transform: rotate(360deg);
   }
 }
+
+.bod-flujos-card {
+  margin-top: 24px;
+  padding: 16px;
+}
+
+.bod-flujos-title {
+  margin-top: 0;
+  margin-bottom: 16px;
+}
+
+.bod-flujos-grid {
+  display: grid;
+  gap: 16px;
+}
+
+@media (min-width: 640px) {
+  .bod-flujos-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.bod-flujo-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.bod-flujo-btn {
+  width: 100%;
+  min-height: 48px;
+  justify-content: flex-start;
+}
+
+.bod-flujo-ayuda {
+  margin: 0;
+  font-size: 0.88rem;
+  color: #616161;
+  line-height: 1.4;
+}
+
+.home-guest-message {
+  margin: 0;
+  opacity: 0.85;
+}

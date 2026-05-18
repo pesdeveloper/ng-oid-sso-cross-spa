@@ -40,6 +40,50 @@ export class Home {
     void this.router.navigate(['/habilitaciones']);
   }
 
+  goHabilitacionesCuenta(): void {
+    void this.router.navigate(['/bod/cuenta']);
+  }
+
+  goHabilitacionesCuentaPorValueId(): void {
+    void this.router.navigate(['/bod/cuenta'], {
+      queryParams: {
+        destino: 'habilitaciones',
+        modo: 'valueId',
+      },
+    });
+  }
+
+  goHabilitacionesCuentaPorIdBie(): void {
+    void this.router.navigate(['/bod/cuenta'], {
+      queryParams: {
+        destino: 'habilitaciones',
+        modo: 'idBie',
+      },
+    });
+  }
+
+  goCementerio(): void {
+    void this.router.navigate(['/cementerio']);
+  }
+
+  goCementerioCuentaPorValueId(): void {
+    void this.router.navigate(['/bod/cuenta'], {
+      queryParams: {
+        destino: 'cementerio',
+        modo: 'valueId',
+      },
+    });
+  }
+
+  goCementerioCuentaPorIdBie(): void {
+    void this.router.navigate(['/bod/cuenta'], {
+      queryParams: {
+        destino: 'cementerio',
+        modo: 'idBie',
+      },
+    });
+  }
+
   get urlConDeepLink(): string {
     return environment.externalSites.urlConDeepLink;
   }

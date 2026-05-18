@@ -8,25 +8,26 @@ export const authConfig: PassedInitialConfig = {
             strictIssuerValidationOnWellKnownRetrievalOff: true,
             redirectUrl: `${window.location.origin}`,
             postLogoutRedirectUri: `${window.location.origin}/logout`,
-            
+
             clientId: 'js_bod_hab_client',
             scope: 'openid profile email phone offline_access tramites',
             postLoginRoute: '/',
 
             responseType: 'code',
             startCheckSession: false,
-            silentRenew: false,
+            silentRenew: true,
             useRefreshToken: true,
+            renewTimeBeforeTokenExpiresInSeconds: 60,
             ignoreNonceAfterRefresh: true,
             historyCleanupOff: false,
             triggerRefreshWhenIdTokenExpired: true,
-            autoUserInfo: true, 
+            autoUserInfo: true,
             renewUserInfoAfterTokenRenew: true,
             //silentRenewUrl: `${window.location.origin}/silent-renew.html`,
-            renewTimeBeforeTokenExpiresInSeconds: 120,
             logLevel: LogLevel.Debug,
             // 🔑 Muy importante: el interceptor solo agrega el token si la URL empieza con uno de estos prefijos
-            // secureRoutes: [
-            // ],            
+            secureRoutes: [
+              environment.apis.bodBaseUrl,
+            ],
         }
 }

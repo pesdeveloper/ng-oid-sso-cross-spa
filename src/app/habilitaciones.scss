@@ -97,6 +97,12 @@
   font-size: 0.95rem;
 }
 
+.paso-bloque-ayuda {
+  margin: 12px 0 0;
+  font-size: 0.9rem;
+  opacity: 0.8;
+}
+
 .alta-acciones-principales {
   display: flex;
   gap: 12px;
@@ -191,6 +197,17 @@
   background: #fff8e1;
   color: #f57f17;
   border: 1px solid #ffe082;
+}
+
+.estado-alta--error {
+  background: #ffebee;
+  color: #c62828;
+  border: 1px solid #ef9a9a;
+}
+
+.response-preview,
+.link-preview {
+  margin-top: 12px;
 }
 
 .paso-item--pendiente {
